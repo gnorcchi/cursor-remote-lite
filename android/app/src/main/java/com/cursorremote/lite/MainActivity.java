@@ -41,7 +41,8 @@ public class MainActivity extends Activity {
     private static final String SETUP = "file:///android_asset/setup.html";
     private static final String APK_MIME = "application/vnd.android.package-archive";
     private static final String UPDATE_FILE = "CursorRemote-update.apk";
-    private static final String SHA_URL = "https://github.com/Suchenl/cursor-remote-lite/releases/latest/download/SHA256SUMS";
+    private static final String RELEASE_REPO = "gnorcchi/cursor-remote-lite";
+    private static final String SHA_URL = "https://github.com/" + RELEASE_REPO + "/releases/latest/download/SHA256SUMS";
     private static final int VOICE = 7;
     private static final int PICK = 8;
     private WebView web;
@@ -193,7 +194,7 @@ public class MainActivity extends Activity {
         String path = u.getPath() == null ? "" : u.getPath();
         if (path.contains("..")) return false;
         if ("github.com".equals(host)
-                && path.matches("/Suchenl/cursor-remote-lite/releases/(download/[^/]+|latest/download)/CursorRemote\\.apk")) {
+                && path.matches("/" + RELEASE_REPO + "/releases/(download/[^/]+|latest/download)/CursorRemote\\.apk")) {
             return true;
         }
         Uri app = Uri.parse(appUrl());

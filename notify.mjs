@@ -25,7 +25,7 @@ function vapid() {
 const keys = vapid();
 // Apple's push service rejects VAPID tokens without a mailto: or https: subject.
 // The subject is an identifier inside the request, not a place this process uploads data.
-webpush.setVapidDetails('https://github.com/Suchenl/cursor-remote-lite', keys.publicKey, keys.privateKey);
+webpush.setVapidDetails('https://github.com/gnorcchi/cursor-remote-lite', keys.publicKey, keys.privateKey);
 export const pushPublicKey = () => keys.publicKey;
 
 // The relay only talks to the push services browsers actually use. Anything else is refused,

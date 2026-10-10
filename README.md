@@ -120,7 +120,7 @@ Cursor 基于 Electron，用 `--remote-debugging-port` 启动后，中继通过 
 **第 1 步：在电脑上安装**
 
 ```bash
-git clone https://github.com/Suchenl/cursor-remote-lite.git
+git clone https://github.com/gnorcchi/cursor-remote-lite.git
 cd cursor-remote-lite
 npm install
 npm run setup        # 创建手机 App 仓库、设置开机自启，可选开启二次验证
@@ -143,7 +143,7 @@ npm run pair
 **第 3 步：装到手机上（可选，但推荐）**
 
 - **iPhone**：Safari 打开后 → 分享 → 添加到主屏幕
-- **Android**：下载 [CursorRemote.apk](https://github.com/Suchenl/cursor-remote-lite/releases/latest/download/CursorRemote.apk) 安装，然后用手机扫配对码，浏览器会提示「在 App 中打开」，点一下就配对进 App 了（配对码用过了就再运行一次 `npm run pair`）。发布页同时有 `SHA256SUMS`、`SHA512SUMS` 和源码提交号。安装前核对：`sha256sum -c SHA256SUMS`。App 内更新也会先核对 SHA-256，对不上就取消安装。
+- **Android**：下载 [CursorRemote.apk](https://github.com/gnorcchi/cursor-remote-lite/releases/latest/download/CursorRemote.apk) 安装，然后用手机扫配对码，浏览器会提示「在 App 中打开」，点一下就配对进 App 了（配对码用过了就再运行一次 `npm run pair`）。发布页同时有 `SHA256SUMS`、`SHA512SUMS` 和源码提交号。安装前核对：`sha256sum -c SHA256SUMS`。App 内更新也会先核对 SHA-256，对不上就取消安装。
   华为等没有谷歌服务的手机也能用（浏览器的「安装应用」在这些手机上通常不可用）。
   注意：纯血鸿蒙（HarmonyOS NEXT / 5.0 及以上）不能直接装 APK，需要先装「卓易通」。
 

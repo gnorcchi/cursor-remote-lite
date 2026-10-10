@@ -122,7 +122,7 @@ Cursor is built on Electron. When started with `--remote-debugging-port`, the re
 **Step 1: Install on your computer**
 
 ```bash
-git clone https://github.com/Suchenl/cursor-remote-lite.git
+git clone https://github.com/gnorcchi/cursor-remote-lite.git
 cd cursor-remote-lite
 npm install
 npm run setup        # create the phone app repo, enable start at login, optionally enable 2FA
@@ -145,7 +145,7 @@ If you can't scan it, send the link shown below the QR code to your phone and op
 **Step 3: Install it on your phone (optional, but recommended)**
 
 - **iPhone**: open it in Safari → Share → Add to Home Screen
-- **Android**: download and install [CursorRemote.apk](https://github.com/Suchenl/cursor-remote-lite/releases/latest/download/CursorRemote.apk), then scan the pairing code with your phone. The browser will offer to "Open in app"; tap it and the app gets paired (if the pairing code has already been used, run `npm run pair` again). The release also includes `SHA256SUMS`, `SHA512SUMS` and the source commit. Check the file first: `sha256sum -c SHA256SUMS`. In-app updates check the SHA-256 too, and cancel the install if it does not match.
+- **Android**: download and install [CursorRemote.apk](https://github.com/gnorcchi/cursor-remote-lite/releases/latest/download/CursorRemote.apk), then scan the pairing code with your phone. The browser will offer to "Open in app"; tap it and the app gets paired (if the pairing code has already been used, run `npm run pair` again). The release also includes `SHA256SUMS`, `SHA512SUMS` and the source commit. Check the file first: `sha256sum -c SHA256SUMS`. In-app updates check the SHA-256 too, and cancel the install if it does not match.
   Works on Huawei and other phones without Google services (the browser's "Install app" option usually isn't available on these phones).
   Note: pure HarmonyOS (HarmonyOS NEXT / 5.0 and later) can't install APKs directly; install "Zhuoyitong" (卓易通) first.
 
