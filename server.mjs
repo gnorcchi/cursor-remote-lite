@@ -12,7 +12,8 @@ import {
   DATA_DIR, encryptUrl, createPairing, pairingValid, consumePairing, listDevices, addDevice, findDevice, updateDevice,
   removeDevice, totpConfig, verifyTotp, needsTotp, saveState, appBase,
 } from './auth.mjs';
-import { pushPublicKey, openEventStream, closeEventStreams, addViewer, removeViewer, deliver, startWatcher } from './notify.mjs';
+import { pushPublicKey, openEventStream, closeEventStreams, addViewer, removeViewer, deliver, startWatcher, pushEndpointAllowed } from './notify.mjs';
+import { t, ghEnv, REPO_OK, FILE_OK } from './locale.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3939);
@@ -25,7 +26,9 @@ const APP_DIR = path.join(__dirname, 'app');
 fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
 
 const CONFIG = loadConfig();
-const PUBLISH_REPO = process.argv.find(a => a.startsWith('--publish='))?.slice('--publish='.length) || process.env.CR_PUBLISH_REPO || CONFIG.publishRepo || '';
+const PUBLISH_REPO_RAW = process.argv.find(a => a.startsWith('--publish='))?.slice('--publish='.length) || process.env.CR_PUBLISH_REPO || CONFIG.publishRepo || '';
+// owner/name only. Anything else is ignored so the relay cannot be pointed at another API path.
+const PUBLISH_REPO = REPO_OK.test(PUBLISH_REPO_RAW) ? PUBLISH_REPO_RAW : '';
 const APP_ORIGIN = PUBLISH_REPO ? `https://${PUBLISH_REPO.split('/')[0].toLowerCase()}.github.io` : '';
 const ALLOWED_ORIGINS = new Set([APP_ORIGIN, ...(process.env.CR_ALLOWED_ORIGINS || '').split(',')].filter(Boolean));
 
@@ -66,7 +69,10 @@ function recordFailure(ip) {
   const now = Date.now();
   failures.set(ip, [...(failures.get(ip) || []), now]);
   globalFailures.push(now);
-  console.log(`!! 验证失败 ip=${ip}（15 分钟内：本 IP ${failures.get(ip).length} 次，总计 ${globalFailures.length} 次）`);
+  console.log(t(
+    `!! 验证失败 ip=${ip}（15 分钟内：本 IP ${failures.get(ip).length} 次，总计 ${globalFailures.length} 次）`,
+    `!! auth failed ip=${ip} (last 15 min: ${failures.get(ip).length} from this IP, ${globalFailures.length} total)`,
+  ));
 }
 
 function readBody(req, limit = 4096) {
@@ -1206,7 +1212,7 @@ async function handleApi(req, res, route) {
     }
     consumePairing();
     const { device: added, token } = addDevice(name);
-    console.log(`[pair] 新设备「${added.name}」 ip=${ip}`);
+    console.log(t(`[pair] 新设备「${added.name}」 ip=${ip}`, `[pair] new device "${added.name}" ip=${ip}`));
     return json(req, res, 200, { token });
   }
 
@@ -1229,13 +1235,13 @@ async function handleApi(req, res, route) {
     const { id } = await readJson(req);
     removeDevice(String(id));
     closeEventStreams(String(id));
-    console.log(`[unpair] 移除设备 ${id}（操作来自「${device.name}」）`);
+    console.log(t(`[unpair] 移除设备 ${id}（操作来自「${device.name}」）`, `[unpair] removed device ${id} (from "${device.name}")`));
     return json(req, res, 200, { ok: true });
   }
   if (route === '/api/logout' && req.method === 'POST') {
     removeDevice(device.id);
     closeEventStreams(device.id);
-    console.log(`[unpair] 设备「${device.name}」自己退出`);
+    console.log(t(`[unpair] 设备「${device.name}」自己退出`, `[unpair] "${device.name}" unpaired itself`));
     return json(req, res, 200, { ok: true });
   }
 
@@ -1243,7 +1249,7 @@ async function handleApi(req, res, route) {
   if (route === '/api/push/key') return json(req, res, 200, { key: pushPublicKey() });
   if (route === '/api/push/subscribe' && req.method === 'POST') {
     const { sub } = await readJson(req);
-    if (!/^https:\/\//.test(sub?.endpoint || '') || !sub.keys?.p256dh || !sub.keys?.auth) return json(req, res, 400, { error: '订阅信息无效' });
+    if (!pushEndpointAllowed(sub?.endpoint) || !sub.keys?.p256dh || !sub.keys?.auth) return json(req, res, 400, { error: '订阅信息无效' });
     updateDevice(device.id, { push: { endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth } } });
     return json(req, res, 200, { ok: true });
   }
@@ -1333,17 +1339,21 @@ function offerFirstPairing() {
   const base = appBase();
   if (!base) return;
   const { link, minutes } = createPairing(base);
-  printQr(`还没有配对的设备。用手机扫码完成配对（${minutes} 分钟内有效；过期后运行 npm run pair）`, link);
+  printQr(t(
+    `还没有配对的设备。用手机扫码完成配对（${minutes} 分钟内有效；过期后运行 npm run pair）`,
+    `No devices are paired yet. Scan to pair (${minutes} minutes, then run npm run pair)`,
+  ), link);
 }
 
 function printQr(label, url) {
-  console.log(`\n${label}：${url}`);
+  console.log(`\n${label}: ${url}`);
   qrcode.generate(url, { small: true });
 }
 
 function run(cmd, args, input) {
   return new Promise((resolve, reject) => {
-    const p = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    const env = cmd === 'gh' ? ghEnv() : process.env;
+    const p = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'], env });
     let out = '', err = '';
     p.stdout.on('data', d => { out += d; });
     p.stderr.on('data', d => { err += d; });
@@ -1368,13 +1378,24 @@ function appUrl() {
 
 const gitBlobSha = buf => crypto.createHash('sha1').update(`blob ${buf.length}\0`).update(buf).digest('hex');
 
+function tunnelUrlOk(url) {
+  try {
+    const u = new URL(url);
+    if (u.username || u.password || u.search || u.hash) return false;
+    if (u.protocol !== 'https:' || (u.port && u.port !== '443')) return false;
+    if (u.pathname !== '/' && u.pathname !== '') return false;
+    return /^[a-z0-9-]+\.trycloudflare\.com$/.test(u.hostname);
+  } catch { return false; }
+}
+
 async function putFile(name, buf, sha) {
+  if (!REPO_OK.test(PUBLISH_REPO) || !FILE_OK.test(name)) throw new Error('refusing to publish outside github.com owner/name');
   const body = { message: `update ${name}`, content: buf.toString('base64'), ...(sha ? { sha } : {}) };
-  await run('gh', ['api', '-X', 'PUT', `repos/${PUBLISH_REPO}/contents/${name}`, '--input', '-'], JSON.stringify(body));
+  await run('gh', ['api', '--hostname', 'github.com', '-X', 'PUT', `repos/${PUBLISH_REPO}/contents/${name}`, '--input', '-'], JSON.stringify(body));
 }
 
 async function remoteShas() {
-  const out = await run('gh', ['api', `repos/${PUBLISH_REPO}/contents`, '--jq', '.[] | [.name, .sha] | @tsv']).catch(() => '');
+  const out = await run('gh', ['api', '--hostname', 'github.com', `repos/${PUBLISH_REPO}/contents`, '--jq', '.[] | [.name, .sha] | @tsv']).catch(() => '');
   return new Map(out.split('\n').filter(Boolean).map(l => l.split('\t')));
 }
 
@@ -1383,30 +1404,44 @@ async function syncApp() {
   const remote = await remoteShas();
   let changed = 0;
   for (const name of fs.readdirSync(APP_DIR)) {
-    if (!MIME[path.extname(name)] || name === 'url.json') continue;
+    if (!FILE_OK.test(name) || !MIME[path.extname(name)] || name === 'url.json') continue;
     const buf = fs.readFileSync(path.join(APP_DIR, name));
     if (remote.get(name) === gitBlobSha(buf)) continue;
     await putFile(name, buf, remote.get(name));
     changed++;
   }
-  if (changed) console.log(`已同步 ${changed} 个 App 文件到 GitHub Pages`);
+  if (changed) console.log(t(`已同步 ${changed} 个 App 文件到 GitHub Pages`, `Synced ${changed} app file(s) to GitHub Pages`));
 }
 
 // Writes the current tunnel address (encrypted) to url.json, so the app on GitHub Pages can find this relay.
+// The only destination is the github.com repository chosen at setup.
 async function publishUrl(url) {
+  if (!tunnelUrlOk(url)) {
+    console.log(t(
+      '!! 拒绝发布这个地址：只发布 Cloudflare 快速隧道（*.trycloudflare.com）',
+      '!! Refusing to publish this address: only a Cloudflare quick tunnel (*.trycloudflare.com) is published',
+    ));
+    return;
+  }
   try {
     await syncApp();
   } catch (e) {
-    console.log(`!! 同步 App 文件失败：${e.message}`);
+    console.log(t(`!! 同步 App 文件失败：${e.message}`, `!! Syncing app files failed: ${e.message}`));
   }
-  if (!await waitReachable(url)) console.log('!! 新地址暂时无法从外网访问，仍然尝试发布');
+  if (!await waitReachable(url)) console.log(t(
+    '!! 新地址暂时无法从外网访问，仍然尝试发布',
+    '!! The new address is not reachable from outside yet; publishing it anyway',
+  ));
   try {
     const remote = await remoteShas();
     await putFile('url.json', Buffer.from(JSON.stringify(encryptUrl(url)) + '\n'), remote.get('url.json'));
-    console.log(`已发布最新地址（GitHub Pages 约 1 分钟后生效）。手机 App 固定地址：${appUrl()}`);
+    console.log(t(
+      `已发布最新地址（GitHub Pages 约 1 分钟后生效）。手机 App 固定地址：${appUrl()}`,
+      `Published the new address (GitHub Pages takes about a minute). Phone app: ${appUrl()}`,
+    ));
     offerFirstPairing();
   } catch (e) {
-    console.log(`!! 发布地址失败：${e.message}`);
+    console.log(t(`!! 发布地址失败：${e.message}`, `!! Publishing the address failed: ${e.message}`));
   }
 }
 
@@ -1417,27 +1452,43 @@ function startTunnel() {
     const m = !shown && String(buf).match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
     if (m) {
       shown = true;
-      console.log(`\n公网地址：${m[0]}`);
+      console.log(t(`\n公网地址：${m[0]}`, `\nPublic address: ${m[0]}`));
       saveState({ relayUrl: m[0] });
       if (PUBLISH_REPO) publishUrl(m[0]);
       else {
-        console.log('（每次重启地址都会变，配对过的手机需要重新配对；运行 npm run setup 可获得固定地址）');
+        console.log(t(
+          '（每次重启地址都会变，配对过的手机需要重新配对；运行 npm run setup 可获得固定地址）',
+          '(The address changes on every restart, so paired phones must pair again. Run npm run setup for a fixed address)',
+        ));
         offerFirstPairing();
       }
     }
   };
   child.stdout.on('data', scan);
   child.stderr.on('data', scan);
-  child.on('error', () => console.log('!! 找不到 cloudflared，请先运行：brew install cloudflared'));
-  child.on('exit', code => { console.log(`!! cloudflared 已退出 (code ${code})`); process.exit(1); });
+  child.on('error', () => console.log(t(
+    '!! 找不到 cloudflared，请先运行：brew install cloudflared',
+    '!! cloudflared was not found. Install it first: brew install cloudflared',
+  )));
+  child.on('exit', code => {
+    console.log(t(`!! cloudflared 已退出 (code ${code})`, `!! cloudflared exited (code ${code})`));
+    process.exit(1);
+  });
   const stop = () => { child.kill(); process.exit(0); };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
 }
 
 server.listen(PORT, TUNNEL ? '127.0.0.1' : HOST, async () => {
-  console.log(`Cursor Remote Lite 已启动，端口 ${PORT}`);
-  console.log(`已配对 ${listDevices().length} 台设备。添加新设备：npm run pair`);
+  if (PUBLISH_REPO_RAW && !PUBLISH_REPO) console.log(t(
+    `!! 发布仓库「${PUBLISH_REPO_RAW}」不是 owner/name，已忽略`,
+    `!! Publish repo "${PUBLISH_REPO_RAW}" is not owner/name, so it was ignored`,
+  ));
+  console.log(t(`Cursor Remote Lite 已启动，端口 ${PORT}`, `Cursor Remote Lite is running on port ${PORT}`));
+  console.log(t(
+    `已配对 ${listDevices().length} 台设备。添加新设备：npm run pair`,
+    `${listDevices().length} device(s) paired. Add one with: npm run pair`,
+  ));
   startWatcher({
     listWindows,
     openCdp: async ws => { const c = new Cdp(ws); await c.connect(); return c; },
@@ -1445,17 +1496,23 @@ server.listen(PORT, TUNNEL ? '127.0.0.1' : HOST, async () => {
   });
   try {
     const wins = await listWindows();
-    console.log(`已连上 Cursor，${wins.length} 个窗口：${wins.map(w => w.title).join(' | ')}`);
+    console.log(t(
+      `已连上 Cursor，${wins.length} 个窗口：${wins.map(w => w.title).join(' | ')}`,
+      `Connected to Cursor, ${wins.length} window(s): ${wins.map(w => w.title).join(' | ')}`,
+    ));
   } catch {
-    console.log(`!! 连不上 ${CDP_URL}。请用 ./start-cursor.sh（Windows: start-cursor.ps1）重新启动 Cursor（带 --remote-debugging-port=9222）`);
+    console.log(t(
+      `!! 连不上 ${CDP_URL}。请用 ./start-cursor.sh（Windows: start-cursor.ps1）重新启动 Cursor（带 --remote-debugging-port=9222）`,
+      `!! Cannot reach ${CDP_URL}. Restart Cursor with ./start-cursor.sh (Windows: start-cursor.ps1) so it listens on --remote-debugging-port=9222`,
+    ));
   }
   if (TUNNEL) {
-    console.log('正在建立 Cloudflare 公网隧道…');
+    console.log(t('正在建立 Cloudflare 公网隧道…', 'Opening a Cloudflare tunnel…'));
     startTunnel();
   } else {
     const ips = Object.values(os.networkInterfaces()).flat()
       .filter(i => i && i.family === 'IPv4' && !i.internal).map(i => i.address);
-    for (const ip of ips) console.log(`  局域网地址：http://${ip}:${PORT}/`);
+    for (const ip of ips) console.log(t(`  局域网地址：http://${ip}:${PORT}/`, `  LAN address: http://${ip}:${PORT}/`));
     if (ips[0]) {
       saveState({ relayUrl: `http://${ips[0]}:${PORT}/` });
       offerFirstPairing();

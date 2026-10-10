@@ -41,4 +41,8 @@ nohup bash -c "
 " >"$LOG" 2>&1 &
 disown
 
-echo "Cursor 将退出并带调试端口重新打开（结果见 $LOG）"
+if [[ "${LC_ALL:-${LANG:-}}" == zh* ]]; then
+  echo "Cursor 将退出并带调试端口重新打开（结果见 $LOG）"
+else
+  echo "Cursor will quit and reopen with the debugging port (see $LOG)"
+fi

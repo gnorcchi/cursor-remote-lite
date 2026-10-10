@@ -143,7 +143,7 @@ npm run pair
 **第 3 步：装到手机上（可选，但推荐）**
 
 - **iPhone**：Safari 打开后 → 分享 → 添加到主屏幕
-- **Android**：下载 [CursorRemote.apk](https://github.com/Suchenl/cursor-remote-lite/releases/latest/download/CursorRemote.apk) 安装，然后用手机扫配对码，浏览器会提示「在 App 中打开」，点一下就配对进 App 了（配对码用过了就再运行一次 `npm run pair`）。
+- **Android**：下载 [CursorRemote.apk](https://github.com/Suchenl/cursor-remote-lite/releases/latest/download/CursorRemote.apk) 安装，然后用手机扫配对码，浏览器会提示「在 App 中打开」，点一下就配对进 App 了（配对码用过了就再运行一次 `npm run pair`）。发布页同时有 `SHA256SUMS`、`SHA512SUMS` 和源码提交号。安装前核对：`sha256sum -c SHA256SUMS`。App 内更新也会先核对 SHA-256，对不上就取消安装。
   华为等没有谷歌服务的手机也能用（浏览器的「安装应用」在这些手机上通常不可用）。
   注意：纯血鸿蒙（HarmonyOS NEXT / 5.0 及以上）不能直接装 APK，需要先装「卓易通」。
 
@@ -245,6 +245,10 @@ Windows 上的启动方式（都在 PowerShell 里运行，不要用 Cursor 自�
 - **二次验证（可选）**：`npm run 2fa` 绑定 Google Authenticator / Microsoft Authenticator / 1Password 等。开启后，配对新设备时必须输入 6 位验证码；还可以设置每 N 天重新验证一次（默认 30 天，填 0 表示只在配对时验证）。即使配对链接泄露，没有你的手机验证码也配不上。
 - **管理设备**：手机上「⋯ → 已配对设备」可以查看和移除，或在电脑上 `npm run devices`。移除后那台设备立即断开。
 - 调试端口 9222 只监听本机；公网模式下中继也只监听 `127.0.0.1`，外部只能通过隧道访问。
+- 手机只会把配对令牌发给 Cloudflare 快速隧道（`*.trycloudflare.com`），或者发给你自己填的局域网地址。GitHub Pages 上的页面不能被当成电脑地址。
+- 通知只发给苹果、谷歌、Mozilla 或微软的推送服务，内容按 Web Push 加密。其他地址一律拒绝，中继不能把内容 POST 到任意第三方。
+- 电脑只把 App 和加密后的地址发布到你在安装时选的那个 **github.com** 仓库，不会发到别的主机。
+- 安卓更新只从本仓库的 GitHub Release（或你自己 Pages 上的同一份文件）下载，安装前用发布页的 SHA-256 核对，不一致就取消。
 - 配对失败多次会临时锁定。
 - 能配对的设备可以完全控制你的 Cursor，等同于能在你电脑上执行命令。**不要把配对链接发到群里或公开的地方。**
 

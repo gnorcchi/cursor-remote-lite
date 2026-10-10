@@ -3,6 +3,8 @@
 # Usage: ./service.sh install | uninstall | status | logs
 set -euo pipefail
 
+say() { if [[ "${LC_ALL:-${LANG:-}}" == zh* ]]; then printf '%s\n' "$1"; else printf '%s\n' "$2"; fi; }
+
 LABEL="com.cursor-remote-lite.relay"
 OLD_LABELS=("com.suchenl.cursor-remote-lite")
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
@@ -43,23 +45,23 @@ EOF
     launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
     for _ in $(seq 1 20); do launchctl list | grep -q "$LABEL" || break; sleep 0.5; done
     launchctl bootstrap "gui/$(id -u)" "$PLIST"
-    echo "已安装并启动。日志：$LOG"
+    say "已安装并启动。日志：$LOG" "Installed and started. Log: $LOG"
     ;;
   uninstall)
     launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
     rm -f "$PLIST"
-    echo "已停止并移除开机自启"
+    say "已停止并移除开机自启" "Stopped, and removed from login items"
     ;;
   status)
     line="$(launchctl list | grep "$LABEL" || true)"
     pid="$(echo "$line" | awk '{print $1}')"
-    if [[ -n "$pid" && "$pid" != "-" ]]; then echo "运行中 (pid $pid)"; else echo "未运行"; fi
+    if [[ -n "$pid" && "$pid" != "-" ]]; then say "运行中 (pid $pid)" "Running (pid $pid)"; else say "未运行" "Not running"; fi
     ;;
   logs)
     tail -n 50 -f "$LOG"
     ;;
   *)
-    echo "用法：$0 install | uninstall | status | logs"
+    say "用法：$0 install | uninstall | status | logs" "Usage: $0 install | uninstall | status | logs"
     exit 1
     ;;
 esac

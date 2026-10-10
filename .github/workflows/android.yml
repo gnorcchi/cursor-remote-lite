@@ -5,21 +5,27 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+# The build does not publish anything. Only the release job, and only on a tag,
+# may create a GitHub Release. It cannot push commits: there is no checkout there.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
         with:
           gradle-version: '8.9'
 
@@ -29,6 +35,9 @@ jobs:
           APP_URL: ${{ vars.APP_URL }}
           VERSION_CODE: ${{ github.run_number }}
           VERSION_NAME: ${{ github.ref_type == 'tag' && github.ref_name || format('0.0.{0}', github.run_number) }}
+          # Gradle does not need the Actions token. A dependency must not be able to use it.
+          GITHUB_TOKEN: ''
+          GH_TOKEN: ''
         run: gradle assembleRelease --no-daemon
 
       # Forks without the KEYSTORE_* secrets get a throwaway key, so their APK can't upgrade over this one.
@@ -36,6 +45,8 @@ jobs:
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          GITHUB_TOKEN: ''
+          GH_TOKEN: ''
         run: |
           BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
           if [ -n "$KEYSTORE_B64" ]; then
@@ -48,17 +59,63 @@ jobs:
           "$BT/zipalign" -p -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
           "$BT/apksigner" sign --ks release.p12 --ks-type PKCS12 --ks-pass env:KEYSTORE_PASSWORD --out CursorRemote.apk aligned.apk
           "$BT/apksigner" verify --print-certs CursorRemote.apk
-          rm release.p12
+          rm -f release.p12 aligned.apk
 
-      - uses: actions/upload-artifact@v4
+      - name: Checksums
+        env:
+          GITHUB_TOKEN: ''
+          GH_TOKEN: ''
+        run: |
+          sha256sum CursorRemote.apk > SHA256SUMS
+          sha512sum CursorRemote.apk > SHA512SUMS
+          printf 'commit %s\nrepository %s\nref %s\n' "$GITHUB_SHA" "$GITHUB_REPOSITORY" "$GITHUB_REF" > SOURCE.txt
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: CursorRemote-apk
-          path: CursorRemote.apk
+          path: |
+            CursorRemote.apk
+            SHA256SUMS
+            SHA512SUMS
+            SOURCE.txt
+          if-no-files-found: error
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: CursorRemote-apk
+          path: dist
 
       - name: Release
-        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_HOST: github.com
         run: |
-          gh release create "$GITHUB_REF_NAME" CursorRemote.apk --title "Cursor Remote $GITHUB_REF_NAME" \
-            --notes "安卓 App：下载 CursorRemote.apk 安装，首次打开填入你的手机 App 地址。"
+          cd dist
+          sha256sum -c SHA256SUMS
+          sha512sum -c SHA512SUMS
+          SHA256="$(awk '{print $1; exit}' SHA256SUMS)"
+          SHA512="$(awk '{print $1; exit}' SHA512SUMS)"
+          gh release create "$GITHUB_REF_NAME" CursorRemote.apk SHA256SUMS SHA512SUMS SOURCE.txt \
+            --title "Cursor Remote $GITHUB_REF_NAME" \
+            --notes "$(cat <<EOF
+          Android app. Download CursorRemote.apk and install it. On first launch, enter your phone app address.
+
+          Check the file before installing: sha256sum -c SHA256SUMS
+          and sha512sum -c SHA512SUMS
+
+          - SHA-256: ${SHA256}
+          - SHA-512: ${SHA512}
+          - Source commit: ${GITHUB_SHA}
+
+          安卓 App：下载 CursorRemote.apk 安装，首次打开填入你的手机 App 地址。安装前用上面的 SHA-256 / SHA-512 核对文件。
+
+          - 源码提交：${GITHUB_SHA}
+          EOF
+          )"

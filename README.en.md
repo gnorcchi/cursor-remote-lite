@@ -145,7 +145,7 @@ If you can't scan it, send the link shown below the QR code to your phone and op
 **Step 3: Install it on your phone (optional, but recommended)**
 
 - **iPhone**: open it in Safari → Share → Add to Home Screen
-- **Android**: download and install [CursorRemote.apk](https://github.com/Suchenl/cursor-remote-lite/releases/latest/download/CursorRemote.apk), then scan the pairing code with your phone. The browser will offer to "Open in app"; tap it and the app gets paired (if the pairing code has already been used, run `npm run pair` again).
+- **Android**: download and install [CursorRemote.apk](https://github.com/Suchenl/cursor-remote-lite/releases/latest/download/CursorRemote.apk), then scan the pairing code with your phone. The browser will offer to "Open in app"; tap it and the app gets paired (if the pairing code has already been used, run `npm run pair` again). The release also includes `SHA256SUMS`, `SHA512SUMS` and the source commit. Check the file first: `sha256sum -c SHA256SUMS`. In-app updates check the SHA-256 too, and cancel the install if it does not match.
   Works on Huawei and other phones without Google services (the browser's "Install app" option usually isn't available on these phones).
   Note: pure HarmonyOS (HarmonyOS NEXT / 5.0 and later) can't install APKs directly; install "Zhuoyitong" (卓易通) first.
 
@@ -247,6 +247,10 @@ How to start on Windows (run these in PowerShell, not Cursor's built-in terminal
 - **Two-factor verification (optional)**: `npm run 2fa` binds Google Authenticator / Microsoft Authenticator / 1Password, etc. Once enabled, pairing a new device requires a 6-digit code; you can also require re-verification every N days (default 30; 0 means only verify at pairing). Even if a pairing link leaks, it can't be used without the code from your phone.
 - **Managing devices**: view and remove devices on your phone under "⋯ → Paired devices", or on your computer with `npm run devices`. A removed device is disconnected immediately.
 - Debugging port 9222 listens only on localhost; in public mode the relay also listens only on `127.0.0.1`, so it can only be reached from outside through the tunnel.
+- The phone sends the pairing token only to a Cloudflare quick tunnel (`*.trycloudflare.com`), or to a LAN address you typed yourself. A page on GitHub Pages is never treated as the computer.
+- Notifications go only to Apple, Google, Mozilla or Microsoft push services, and the payload is encrypted as Web Push. Any other address is refused, so the relay cannot POST the content to an arbitrary third party.
+- The computer publishes the app and the encrypted address only to the **github.com** repository you chose during setup, not to any other host.
+- Android updates download only from this repository's GitHub Release (or the same file on your own Pages site). The install is cancelled unless the bytes match the SHA-256 on the release.
 - Repeated failed pairing attempts trigger a temporary lockout.
 - A paired device has full control over your Cursor, which is equivalent to being able to run commands on your computer. **Don't post pairing links in group chats or anywhere public.**
 

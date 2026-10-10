@@ -1,7 +1,7 @@
 {
   "name": "Cursor Remote",
   "short_name": "Cursor Remote",
-  "description": "在手机上查看和操作电脑上的 Cursor",
+  "description": "Control the Cursor on your computer from your phone. 在手机上查看和操作电脑上的 Cursor",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

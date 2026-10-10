@@ -61,7 +61,17 @@ const remotePath = p => p.startsWith('~/') ? `"$HOME"/${shq(p.slice(2))}` : shq(
 const SSH_OPTS = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', '-o', 'ControlMaster=auto',
   '-o', `ControlPath=${path.join(os.homedir(), '.cursor-remote-lite', 'ssh-%C')}`, '-o', 'ControlPersist=120'];
 
+// Host is a separate ssh argument, so a value starting with "-" would be an ssh option
+// (for example ProxyCommand) and could send the file somewhere else.
+const SSH_HOST = /^(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9][A-Za-z0-9._-]*$/;
+function assertHost(host) {
+  if (typeof host !== 'string' || host.startsWith('-') || host.includes('@-') || !SSH_HOST.test(host)) {
+    throw new Error(`SSH 连接 ${String(host ?? '').slice(0, 80)} 失败：主机名无效`);
+  }
+}
+
 async function ssh(host, command, limit) {
+  assertHost(host);
   try {
     return await sshOnce(host, command, limit);
   } catch {

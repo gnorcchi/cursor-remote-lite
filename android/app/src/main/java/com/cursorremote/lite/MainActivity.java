@@ -28,13 +28,20 @@ import android.webkit.WebViewClient;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Locale;
 
 // A thin WebView shell around the user's GitHub Pages app, so it installs without Google Play services or PWA support.
 public class MainActivity extends Activity {
     private static final String SETUP = "file:///android_asset/setup.html";
     private static final String APK_MIME = "application/vnd.android.package-archive";
     private static final String UPDATE_FILE = "CursorRemote-update.apk";
+    private static final String SHA_URL = "https://github.com/Suchenl/cursor-remote-lite/releases/latest/download/SHA256SUMS";
     private static final int VOICE = 7;
     private static final int PICK = 8;
     private WebView web;
@@ -127,6 +134,74 @@ public class MainActivity extends Activity {
     }
 
     private void downloadUpdate(String url) {
+        if (!allowedUpdateUrl(url)) {
+            Toast.makeText(this, NotifyService.tr("已拒绝这个更新：地址不受信任", "Update refused: that address is not trusted"), Toast.LENGTH_LONG).show();
+            return;
+        }
+        Toast.makeText(this, NotifyService.tr("正在核对发布页上的 SHA-256", "Checking the SHA-256 on the release page"), Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            String expect = officialSha256();
+            if (expect == null) {
+                runOnUiThread(() -> Toast.makeText(this, NotifyService.tr("找不到官方校验值，已取消更新", "No official checksum was found, so the update was cancelled"), Toast.LENGTH_LONG).show());
+                return;
+            }
+            prefs.edit().putString("updateSha", expect).apply();
+            runOnUiThread(() -> enqueueUpdate(url));
+        }, "cursor-remote-update").start();
+    }
+
+    // The checksum is read from the official release, not from the page, so the page cannot pick its own hash.
+    private String officialSha256() {
+        HttpURLConnection c = null;
+        try {
+            c = (HttpURLConnection) new URL(SHA_URL).openConnection();
+            c.setConnectTimeout(15000);
+            c.setReadTimeout(15000);
+            c.setInstanceFollowRedirects(true);
+            if (c.getResponseCode() != 200) return null;
+            String text;
+            try (InputStream in = c.getInputStream()) {
+                text = new String(readStream(in), StandardCharsets.UTF_8);
+            }
+            for (String line : text.split("\n")) {
+                String trimmed = line.trim();
+                if (!trimmed.endsWith("CursorRemote.apk")) continue;
+                String hex = trimmed.split("\\s+")[0];
+                if (hex.matches("(?i)[0-9a-f]{64}")) return hex.toLowerCase(Locale.US);
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (c != null) c.disconnect();
+        }
+    }
+
+    private static byte[] readStream(InputStream in) throws Exception {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[4096];
+        for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
+        return out.toByteArray();
+    }
+
+    private boolean allowedUpdateUrl(String url) {
+        Uri u;
+        try { u = Uri.parse(url); } catch (Exception e) { return false; }
+        if (u == null || !"https".equalsIgnoreCase(u.getScheme()) || u.getUserInfo() != null) return false;
+        if (u.getQuery() != null || u.getFragment() != null) return false;
+        String host = u.getHost() == null ? "" : u.getHost().toLowerCase(Locale.ROOT);
+        String path = u.getPath() == null ? "" : u.getPath();
+        if (path.contains("..")) return false;
+        if ("github.com".equals(host)
+                && path.matches("/Suchenl/cursor-remote-lite/releases/(download/[^/]+|latest/download)/CursorRemote\\.apk")) {
+            return true;
+        }
+        Uri app = Uri.parse(appUrl());
+        String appHost = app.getHost() == null ? "" : app.getHost().toLowerCase(Locale.ROOT);
+        return !appHost.isEmpty() && host.equals(appHost) && path.endsWith("/CursorRemote.apk");
+    }
+
+    private void enqueueUpdate(String url) {
         DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
         long previous = prefs.getLong("updateId", -1);
         if (previous != -1) dm.remove(previous);
@@ -142,9 +217,15 @@ public class MainActivity extends Activity {
     }
 
     private void installUpdate(long id) {
-        Uri apk = ((DownloadManager) getSystemService(DOWNLOAD_SERVICE)).getUriForDownloadedFile(id);
-        if (apk == null) {
-            Toast.makeText(this, NotifyService.tr("下载失败，请稍后在菜单里重试", "Download failed; retry from the menu later"), Toast.LENGTH_LONG).show();
+        DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+        Uri apk = dm.getUriForDownloadedFile(id);
+        String expect = prefs.getString("updateSha", "");
+        String got = apk == null ? null : sha256(apk);
+        if (apk == null || got == null || !got.equals(expect)) {
+            dm.remove(id);
+            Toast.makeText(this, NotifyService.tr(
+                    apk == null ? "下载失败，请稍后在菜单里重试" : "校验失败，已取消安装",
+                    apk == null ? "Download failed; retry from the menu later" : "Checksum failed, so the install was cancelled"), Toast.LENGTH_LONG).show();
             return;
         }
         Intent install = new Intent(Intent.ACTION_VIEW)
@@ -154,6 +235,20 @@ public class MainActivity extends Activity {
             startActivity(install);
         } catch (Exception e) {
             Toast.makeText(this, NotifyService.tr("无法打开安装界面，请到浏览器下载安装", "Cannot open the installer; download it in a browser"), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private String sha256(Uri uri) {
+        try (InputStream in = getContentResolver().openInputStream(uri)) {
+            if (in == null) return null;
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] buf = new byte[8192];
+            for (int n; (n = in.read(buf)) > 0; ) md.update(buf, 0, n);
+            StringBuilder sb = new StringBuilder();
+            for (byte b : md.digest()) sb.append(String.format(Locale.US, "%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            return null;
         }
     }
 
@@ -313,8 +408,13 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void update(String url) {
-            if (url == null || !url.startsWith("https://")) return;
+        public void update(String url, String sha256) {
+            // sha256 is required so an older page cannot install a file this build has not checked.
+            // The value itself is not trusted: downloadUpdate reads SHA256SUMS from the release.
+            if (url == null || sha256 == null || !sha256.matches("(?i)[0-9a-f]{64}")) {
+                runOnUiThread(() -> Toast.makeText(MainActivity.this, NotifyService.tr("找不到官方校验值，已取消更新", "No official checksum was found, so the update was cancelled"), Toast.LENGTH_LONG).show());
+                return;
+            }
             runOnUiThread(() -> downloadUpdate(url));
         }
     }
