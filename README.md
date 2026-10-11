@@ -1,305 +1,307 @@
-**中文** | [English](README.en.md)
+[中文](README.zh.md) | **English**
 
 # Cursor Remote Lite
 
-**电脑不用带在身边，也能正常干活。** 电脑留在家里或公司开着，出门只带手机，就能接着用电脑上的 Cursor：给 Agent 布置任务、看它干到哪了、回答它的提问、批准命令、检查改动的文件，本地窗口和 SSH 远程窗口都行。
-免费、开源、自托管，不需要服务器，也不需要手机和电脑在同一个 Wi-Fi。
+**Leave your laptop behind and keep working.** Your computer stays on at home or at the office; with just your phone you keep using the Cursor on it: give the Agent tasks, check its progress, answer its questions, approve commands, and review the files it changed, in local and SSH remote windows alike.
+Free, open source and self-hosted. No server needed, and your phone doesn't have to be on the same Wi-Fi as your computer.
 
-> 灵感来自 [len5ky/CursorRemote](https://github.com/len5ky/CursorRemote)，这是一个从零实现的免费版本。
+> Inspired by [len5ky/CursorRemote](https://github.com/len5ky/CursorRemote); this is a free version written from scratch.
 
-<p align="center"><img src="docs/quickstart.gif" width="300" alt="上手演示：预览文件、切换窗口、调模型参数、批准命令、运行中排队发消息、处理改动的文件"></p>
+<p align="center"><img src="docs/en/quickstart.gif" width="300" alt="Demo: preview a file, switch windows, adjust model parameters, approve a command, queue a message while the Agent runs, handle changed files"></p>
 
-<p align="center"><sub>演示：点文件名预览 → 切到 SSH 窗口 → 调模型思考强度 → 批准运行测试 → 展开子 Agent → Agent 运行中发消息自动排队，这一轮结束后发出 → 逐个保留 / 撤销改动的文件（撤销前会确认）（演示数据）</sub></p>
+<p align="center"><sub>Demo: tap a file name to preview it → switch to an SSH window → raise the model's reasoning effort → approve the test run → expand the running subagents → a message sent while the Agent is busy is queued and goes out when the turn ends → keep / undo changed files one by one (undo asks first) (demo data)</sub></p>
 
-## 界面
+## Screenshots
 
-| 聊天 | 文件预览 | 切换窗口 | 选模型 |
+| Chat | File preview | Switch window | Pick model |
 |:-:|:-:|:-:|:-:|
-| <img src="docs/ui-chat.png" width="190" alt="聊天"> | <img src="docs/ui-file.png" width="190" alt="文件预览"> | <img src="docs/ui-windows.png" width="190" alt="切换窗口"> | <img src="docs/ui-model.png" width="190" alt="选模型"> |
-| **模型参数** | **运行中：子 Agent + 排队** | **改动的文件** | **危险操作二次确认** |
-| <img src="docs/ui-params.png" width="190" alt="模型参数"> | <img src="docs/ui-running.png" width="190" alt="运行中：子 Agent 和排队消息"> | <img src="docs/ui-changes.png" width="190" alt="改动的文件"> | <img src="docs/ui-confirm.png" width="190" alt="二次确认"> |
+| <img src="docs/en/ui-chat.png" width="190" alt="Chat"> | <img src="docs/en/ui-file.png" width="190" alt="File preview"> | <img src="docs/en/ui-windows.png" width="190" alt="Switch window"> | <img src="docs/en/ui-model.png" width="190" alt="Pick model"> |
+| **Model parameters** | **Running: subagents + queue** | **Changed files** | **Confirm risky actions** |
+| <img src="docs/en/ui-params.png" width="190" alt="Model parameters"> | <img src="docs/en/ui-running.png" width="190" alt="Running: subagents and queued messages"> | <img src="docs/en/ui-changes.png" width="190" alt="Changed files"> | <img src="docs/en/ui-confirm.png" width="190" alt="Confirmation"> |
 
-## 为什么做这个
+## Why I built this
 
-### 一个场景
+### A typical day
 
-早上出门前，你在电脑上让 Cursor 的 Agent 去改一个 bug，项目在公司的 GPU 服务器上（SSH 远程窗口）。然后你去通勤、开会、吃饭，或者干脆出差两天，电脑没带。
+Before leaving in the morning, you ask Cursor's Agent to fix a bug in a project that lives on your company's GPU server (an SSH remote window). Then you commute, sit in meetings, grab lunch, or travel for two days, and the laptop stays behind.
 
-这期间 Agent 会：跑完一轮等你验收；停下来等你点「运行」；用提问的方式问你「session 过期该返回 401 还是自动续期？」。你也会想到新需求，想让它接着干。
+Meanwhile the Agent finishes a turn and waits for you to check it; stops to wait for you to tap "Run"; or asks you a question like "When a session expires, should we return 401 or renew it?". You also think of the next thing you want it to do.
 
-**你需要的不是「远程看一眼」，而是电脑不在身边时也能正常干活**：布置任务、回答问题、批准命令、看改了哪些文件、决定保留还是撤销。而且干活的环境必须是你自己那台电脑：本地的代码和数据、配好的 SSH 服务器、装好的依赖，都在那里。
+**What you need isn't "a quick remote peek". It's being able to keep working without your computer**: give tasks, answer questions, approve commands, see which files changed, and decide what to keep or undo. And the work has to happen in your own environment: your local code and data, your configured SSH servers, your installed dependencies.
 
-### 现有方案能做到什么，差在哪
+### What existing options can do, and where they fall short
 
-- **Cursor 官方手机端**（Cursor for iOS + Remote Control）：只有 iPhone / iPad（iOS 26+），安卓还没有原生 App；需要付费套餐；Remote Control 只支持 Agents 窗口，并且 Agent 的推理循环会转到 Cursor 云端。普通编辑器窗口、SSH 远程窗口里正在进行的对话管不了。
-- **[len5ky/CursorRemote](https://github.com/len5ky/CursorRemote)**：思路相同（通过调试端口控制本机 Cursor），但需要 $7.99/月的许可证，代码是 source-available 而非开源；外网访问要自己配 Tailscale 或 Telegram 机器人。
-- **远程桌面**（向日葵、ToDesk、RustDesk、Chrome 远程桌面）：什么都能控制，但等于在手机上操作一块缩小的电脑屏幕，看 Cursor 的聊天面板、点小按钮、打字都非常吃力，也费流量；Agent 跑完或等你确认时也不会提醒你。
+- **Cursor's official mobile app** (Cursor for iOS + Remote Control): iPhone / iPad only (iOS 26+), with no native Android app yet; requires a paid plan; Remote Control only works with the Agents window, and the Agent's reasoning loop moves to Cursor's cloud. Conversations already running in regular editor windows or SSH remote windows can't be controlled.
+- **[len5ky/CursorRemote](https://github.com/len5ky/CursorRemote)**: same idea (controls the local Cursor through its debugging port), but requires a $7.99/month license, and the code is source-available rather than open source; for access from outside your network you have to set up Tailscale or a Telegram bot yourself.
+- **Remote desktop** (Sunlogin, ToDesk, RustDesk, Chrome Remote Desktop): can control everything, but it means driving a shrunken desktop on your phone; reading Cursor's chat panel, hitting tiny buttons and typing are all painful, it uses a lot of data, and nothing tells you when the Agent finishes or needs you.
 
-### 这个项目怎么做
+### What this project does
 
-电脑上跑一个很小的中继，直接操作你电脑上真实的 Cursor；手机上是一个为手机重新设计的界面：
+A tiny relay on your computer drives the real Cursor running there, and your phone gets an interface designed for phones:
 
-- Agent 的对话像聊天 App 一样看，直接打字发消息，运行中发的消息自动排队。
-- Agent 等你点「运行」、或者用提问的方式问你问题时，手机弹通知，点开就能回答。
-- 改了哪些文件、加删了多少行，逐个保留或撤销；需要时还能切到实时画面。
-- 所有窗口都能用：本地、SSH 远程、Agents 窗口；模式、模型、思考强度随时换。
-- 代码和对话留在你自己的电脑上，不上传到任何云端 Agent；手机通过 Cloudflare 隧道（HTTPS）实时访问；安卓、iPhone 都能用，国内网络也能用。
+- Read the Agent conversation like a chat app and type messages directly; messages sent while it's busy are queued automatically.
+- When the Agent waits for you to tap "Run" or asks you a question, your phone gets a notification and you answer right there.
+- See which files changed and how many lines, keep or undo each one; switch to a live screen view when needed.
+- Every window works: local, SSH remote, Agents; switch mode, model and reasoning effort anytime.
+- Your code and conversations stay on your own computer and are never handed to a cloud Agent; your phone reaches it in real time through a Cloudflare tunnel (HTTPS). Works on Android and iPhone, including on networks in mainland China.
 
-### 为什么安卓和 iPhone 都要支持
+### Why support both Android and iPhone
 
-官方 App 只有 iPhone，但用户的手机远不止 iPhone：
+The official app is iPhone-only, but people's phones are far from all iPhones:
 
-| 地区 | iOS | 安卓 | 时间 |
+| Region | iOS | Android | Period |
 |---|---|---|---|
-| 美国 | 60.7% | 39.3% | 2026 年 8 月 |
-| 欧洲 | 39.5% | 60.4% | 2026 年 7 月 |
-| 全球 | 约 28% | 约 72% | 2026 年 |
-| 中国大陆 | 少数 | 多数，且华为、小米、OPPO 等很多没有谷歌服务 | — |
+| United States | 60.7% | 39.3% | August 2026 |
+| Europe | 39.5% | 60.4% | July 2026 |
+| Worldwide | ~28% | ~72% | 2026 |
+| Mainland China | Minority | Majority, and many Huawei, Xiaomi, OPPO, etc. phones have no Google services | — |
 
-数据来自 [StatCounter](https://gs.statcounter.com/os-market-share/mobile/)，它统计的是约 150 万个网站的访问量里各系统的占比，反映「实际在用的手机」，不是销量。iPhone 用户上网更多，所以 iOS 的占比会略偏高；具体数字看个大概即可，结论是确定的：**美国 iPhone 略多，欧洲和全球安卓更多，国内大部分是没有谷歌服务的安卓**。
+Data from [StatCounter](https://gs.statcounter.com/os-market-share/mobile/), which measures each OS's share of traffic across roughly 1.5 million websites. It reflects "phones actually in use", not sales. iPhone users browse more, so iOS's share is slightly inflated; treat the exact numbers as rough, but the conclusion is clear: **iPhone is slightly ahead in the US, Android leads in Europe and worldwide, and in China most phones are Android without Google services**.
 
-所以本项目同时提供：没有谷歌服务也能装的安卓 App，以及 iPhone 上「添加到主屏幕」的全屏应用（不用上架 App Store，欧洲也能用）。
+So this project provides both: an Android app that installs without Google services, and a full-screen "Add to Home Screen" app on iPhone (no App Store listing needed, so it works in Europe too).
 
-## 和其他方案的区别
+## How it compares
 
-| | Cursor Remote Lite（本项目） | Cursor 官方 iOS App | len5ky/CursorRemote | 远程桌面 |
+| | Cursor Remote Lite (this project) | Cursor official iOS app | len5ky/CursorRemote | Remote desktop |
 |---|---|---|---|---|
-| 价格 | 免费 | 需要 Cursor 付费套餐 | $7.99/月 | 多数免费 / 付费 |
-| 许可证 | MIT 开源 | 闭源 | source-available | — |
-| 手机 | 安卓 App、iPhone、任意浏览器 | 仅 iPhone / iPad | 任意浏览器、Telegram | 各平台 App |
-| 能控制的窗口 | 所有窗口：本地、SSH 远程、Agents | 仅 Agents 窗口（Remote Control） | 本机窗口 | 整个桌面 |
-| 代码 / 对话经过哪里 | 只在你的电脑，经 Cloudflare 隧道（HTTPS）传到手机 | Agent 循环在 Cursor 云端 | 你的电脑 + 局域网 / Tailscale | 远程桌面厂商的服务器 |
-| 外网访问 | 自带，免配置；地址固定 | 自带 | 需自己配 Tailscale / Telegram | 自带 |
-| 手机上的体验 | 聊天界面 + 实时画面，文件预览 | 原生 App | 聊天界面 | 缩小的电脑屏幕 |
-| 完成 / 等确认时提醒 | ✅ App 内通知，不用装别的软件 | ✅ | 通过 Telegram | ❌ |
-| 电脑需要开着 | 需要（不能睡眠） | 云端 Agent 不需要；Remote Control 需要 | 需要 | 需要 |
+| Price | Free | Requires a paid Cursor plan | $7.99/month | Mostly free / paid |
+| License | MIT open source | Closed source | source-available | — |
+| Phones | Android app, iPhone, any browser | iPhone / iPad only | Any browser, Telegram | Apps for each platform |
+| Windows it can control | All windows: local, SSH remote, Agents | Agents window only (Remote Control) | Local windows | The whole desktop |
+| Where your code / chats go | Only on your computer, sent to your phone through a Cloudflare tunnel (HTTPS) | Agent loop runs in Cursor's cloud | Your computer + LAN / Tailscale | The remote desktop vendor's servers |
+| Access from outside your network | Built in, no setup; fixed address | Built in | Set up Tailscale / Telegram yourself | Built in |
+| Experience on the phone | Chat UI + live screen, file preview | Native app | Chat UI | Shrunken desktop screen |
+| Alerts when done / waiting for approval | ✅ In-app notifications, nothing else to install | ✅ | Via Telegram | ❌ |
+| Computer must stay on | Yes (no sleep) | Not for cloud Agents; yes for Remote Control | Yes | Yes |
 
-**本项目的不足**，也写在这里：
+**This project's limitations**, stated up front:
 
-- 靠读取 Cursor 的界面实现，Cursor 大改版后可能需要跟着更新。
-- 后台服务目前只支持 macOS；Windows 上用 `start-cursor.ps1` 启动 Cursor，服务需要手动开着（见下文）。
-- 免费的 Cloudflare 快速隧道没有可用性保证，偶尔会断开重连。
+- It works by reading Cursor's UI, so a major Cursor redesign may require an update.
+- The background service currently supports macOS only; on Windows, start Cursor with `start-cursor.ps1` and keep the relay running by hand (see below).
+- Cloudflare's free quick tunnels come with no availability guarantee and occasionally disconnect and reconnect.
 
-## 功能
+## Features
 
-- **聊天模式**：像聊天 App 一样看 Agent 对话（气泡、工具调用卡片、思考过程），直接输入发送，Agent 停下来等你确认时，按钮会出现在手机上。
-- **文件预览**：对话里出现的文件名（蓝色）、带 📄 的工具卡片，点一下就能全屏查看文件内容，带行号；图片直接显示。SSH 远程窗口的文件通过 `ssh` 读取（要求电脑能免密 ssh 到那台机器，用 Cursor 连 SSH 的电脑一般都已配置好）。
-- **屏幕模式**：实时画面，可以只看聊天面板或整个窗口，点按 / 滚动 / 缩放 / 常用按键都会传到电脑上。
-- **通知**：Agent 跑完、或停下来等你点「运行 / 允许」时，手机弹通知，点一下直接打开那个窗口。所有窗口都会提醒，正在手机上看的那个窗口不重复提醒。
-- **多窗口**：点左上角窗口名切换窗口，SSH 远程窗口、Agents 窗口都能选。
-- **模式 / 模型 / 历史对话**：手机上直接切 Agent / Plan / Ask，换模型，打开历史对话，新建对话。
-- **模型参数**：模型列表里点「参数」可以调上下文长度（如 300K / 1M）、思考强度（Low → Max）、Fast 开关；顶部还有 MAX Mode 开关。能调哪些由 Cursor 对这个模型提供什么决定。
-- **回答 Agent 的提问**：Agent 用提问的方式问你问题时（单选、多个问题、或者自己写答案），手机上会出现「Agent 在问你」卡片，点选项或写上答案再提交，也可以跳过；通知里直接显示问题内容。
-- **排队消息**：Agent 正在跑时发的消息会进 Cursor 的排队列表，手机上会显示「Agent 正在运行」和排队中的每一条，可以修改、立即发送（打断当前这一轮）或删除，也可以一键停止 Agent。
-- **子 Agent**：Agent 派出的子 Agent 正在跑时，手机上会显示「子 Agent 运行中 N 个」（默认收起，点开才列出），点「查看」可以看它自己的对话过程（只读），也可以单独停止它。
-- **改动的文件**：Agent 改过文件后，输入框上方会出现「改动了 N 个文件 ›」，点开能看到每个文件加了 / 删了多少行，点文件名看内容，也可以逐个「保留」或「撤销」，和桌面上的 Keep / Undo 一样。
-- **发图片**：输入框旁的图片按钮，选一张照片或截图（比如手机拍的报错画面），会附加到 Cursor 的输入框里，再写上文字一起发出去。大图会先在手机上压缩。
-- **防误触**：停止 Agent、停止子 Agent、撤销改动、删除排队消息、拒绝、移除设备、取消配对这类不可逆的操作，都会先弹出确认。
-- **语音输入（默认关闭）**：输入法键盘上的麦克风就能语音输入，所以默认不显示麦克风按钮。需要的话在「⋯ → 语音按钮」里打开：安卓 App 调用系统语音识别，iPhone / 浏览器用浏览器自带的语音识别。
-- **中文 / English**：默认跟随手机系统语言，也可以在「⋯ → 语言 / Language」里切换；通知内容也会跟着变。
-- **设备配对**：不用密码。电脑上生成一次性二维码，手机扫一下就配对好了；可选 Authenticator 二次验证。
-- **固定地址**：App 放在你自己的 GitHub Pages 上，电脑重启、隧道地址变化都不用重新配对。
+- **Chat mode**: read Agent conversations like a chat app (bubbles, tool-call cards, thinking), type and send directly. When the Agent stops to wait for your approval, the buttons appear on your phone.
+- **File preview**: tap a file name in the conversation (shown in blue) or a tool card marked 📄 to view the file full screen with line numbers; images are displayed directly. Files in SSH remote windows are read via `ssh` (your computer needs passwordless ssh to that machine; if you already use Cursor over SSH, this is usually set up).
+- **Screen mode**: a live view of either just the chat panel or the whole window. Taps, scrolling, zooming and common keys are all sent to the computer.
+- **Notifications**: when an Agent finishes, or stops waiting for you to tap "Run / Allow", your phone gets a notification; tap it to jump straight to that window. All windows trigger alerts, except the one you're currently viewing on your phone.
+- **Multiple windows**: tap the window name in the top-left to switch windows, including SSH remote windows and the Agents window.
+- **Modes / models / chat history**: switch between Agent / Plan / Ask, change models, open past conversations and start new ones, right from your phone.
+- **Model parameters**: tap "Parameters" in the model list to adjust context length (e.g. 300K / 1M), reasoning effort (Low → Max) and the Fast toggle; there's also a MAX Mode toggle at the top. Which options are available depends on what Cursor offers for that model.
+- **Answer the Agent's questions**: when the Agent asks you something through its question prompt (multiple choice, several questions, or a free-text answer), a "The Agent is asking you" card appears on your phone; tap an option or write your own answer and submit, or skip. The notification shows the question itself.
+- **Queued messages**: messages sent while the Agent is running go into Cursor's queue. Your phone shows "Agent is running" plus each queued message, which you can edit, send immediately (interrupting the current turn) or delete. You can also stop the Agent with one tap.
+- **Sub-agents**: while sub-agents spawned by the Agent are running, your phone shows "Subagents running: N" (collapsed by default; tap to expand the list). Tap "View" to see a sub-agent's own conversation (read-only), or stop it individually.
+- **Changed files**: after the Agent edits files, "N files changed ›" appears above the input box. Tap it to see lines added / removed per file, tap a file name to view it, and Keep or Undo each file, just like Keep / Undo on the desktop.
+- **Send images**: the image button next to the input box attaches a photo or screenshot (say, a picture of an error on another screen) to Cursor's input box, so you can send it along with your message. Large images are compressed on the phone first.
+- **Confirmation for risky actions**: stopping the Agent or a sub-agent, undoing changes, deleting queued messages, rejecting, removing a device and unpairing all ask for confirmation first.
+- **Voice input (off by default)**: your keyboard's microphone already does dictation, so the microphone button is hidden by default. Turn it on under "⋯ → Voice button": the Android app uses the system speech recognizer; iPhone / browsers use the browser's built-in speech recognition.
+- **中文 / English**: follows your phone's system language by default; you can also switch under "⋯ → 语言 / Language". Notifications follow the chosen language too. Commands and logs on the computer follow that computer's system language. Set `LC_ALL` to override it.
+- **Device pairing**: no passwords. Your computer generates a one-time QR code, you scan it with your phone, and you're paired; optional Authenticator two-factor verification.
+- **Fixed address**: the app is hosted on your own GitHub Pages, so you don't need to re-pair when your computer restarts or the tunnel address changes.
 
-## 原理
+## How it works
 
 ```
-手机 App (GitHub Pages) ──HTTPS/WebSocket──> Cloudflare 隧道 ──> 电脑上的中继 (Node) ──CDP──> Cursor
+Phone app (GitHub Pages) ──HTTPS/WebSocket──> Cloudflare tunnel ──> relay on your computer (Node) ──CDP──> Cursor
 ```
 
-Cursor 基于 Electron，用 `--remote-debugging-port` 启动后，中继通过 Chrome DevTools Protocol 读取聊天内容、截取画面、模拟点击和键盘输入。
+(Phone app on GitHub Pages → Cloudflare tunnel → relay (Node) on your computer → Cursor.)
 
-## 要求
+Cursor is built on Electron. When started with `--remote-debugging-port`, the relay uses the Chrome DevTools Protocol to read chat content, capture the screen, and simulate clicks and keyboard input.
 
-- macOS（Windows / Linux 上 `server.mjs` 也能跑，但后台服务脚本只支持 macOS，Windows 用法见下文「Windows」）
+## Requirements
+
+- macOS (`server.mjs` also runs on Windows / Linux, but the background service script only supports macOS; see "Windows" below for Windows usage)
 - Node.js 22+
-- [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)：外网访问，`brew install cloudflared`
-- [GitHub CLI](https://cli.github.com/)：固定地址，`brew install gh`
+- [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/): for access from outside your network, `brew install cloudflared`
+- [GitHub CLI](https://cli.github.com/): for the fixed address, `brew install gh`
 
-## 快速上手（5 分钟）
+## Quick start (5 minutes)
 
-**第 1 步：在电脑上安装**
+**Step 1: Install on your computer**
 
 ```bash
 git clone https://github.com/gnorcchi/cursor-remote-lite.git
 cd cursor-remote-lite
 npm install
-npm run setup        # 创建手机 App 仓库、设置开机自启，可选开启二次验证
-./start-cursor.sh    # 让 Cursor 带调试端口重启（会先退出当前 Cursor）
+npm run setup        # create the phone app repo, enable start at login, optionally enable 2FA
+./start-cursor.sh    # restart Cursor with the debugging port (quits the current Cursor first)
 ```
 
-`npm run setup` 会在**你自己的** GitHub 账号下创建一个公开仓库（默认叫 `cursor-remote-app`），用 GitHub Pages 托管手机 App 和加密过的电脑地址。每个人用自己的，和作者或其他用户都没有关系。
+`npm run setup` creates a public repository under **your own** GitHub account (named `cursor-remote-app` by default) and uses GitHub Pages to host the phone app and your computer's encrypted address. Everyone uses their own; it has nothing to do with the author or other users.
 
-**第 2 步：配对手机**
+**Step 2: Pair your phone**
 
 ```bash
 npm run pair
 ```
 
-终端里会出现一个二维码（10 分钟内有效，只能用一次）。用手机相机或浏览器扫码打开即可，没有密码要输。
-扫不了码的话，把二维码下面的链接发到手机上打开（或者粘贴到 App 的输入框里）。
+A QR code appears in the terminal (valid for 10 minutes, single use). Scan it with your phone's camera or browser to open it; there's no password to type.
+If you can't scan it, send the link shown below the QR code to your phone and open it (or paste it into the app's input box).
 
-<p align="center"><img src="docs/ui-pair.png" width="220" alt="未配对时的界面"></p>
+<p align="center"><img src="docs/en/ui-pair.png" width="220" alt="Screen shown before pairing"></p>
 
-**第 3 步：装到手机上（可选，但推荐）**
+**Step 3: Install it on your phone (optional, but recommended)**
 
-- **iPhone**：Safari 打开后 → 分享 → 添加到主屏幕
-- **Android**：下载 [CursorRemote.apk](https://github.com/gnorcchi/cursor-remote-lite/releases/latest/download/CursorRemote.apk) 安装，然后用手机扫配对码，浏览器会提示「在 App 中打开」，点一下就配对进 App 了（配对码用过了就再运行一次 `npm run pair`）。发布页同时有 `SHA256SUMS`、`SHA512SUMS` 和源码提交号。安装前核对：`sha256sum -c SHA256SUMS`。App 内更新也会先核对 SHA-256，对不上就取消安装。
-  华为等没有谷歌服务的手机也能用（浏览器的「安装应用」在这些手机上通常不可用）。
-  注意：纯血鸿蒙（HarmonyOS NEXT / 5.0 及以上）不能直接装 APK，需要先装「卓易通」。
+- **iPhone**: open it in Safari → Share → Add to Home Screen
+- **Android**: download and install [CursorRemote.apk](https://github.com/gnorcchi/cursor-remote-lite/releases/latest/download/CursorRemote.apk), then scan the pairing code with your phone. The browser will offer to "Open in app"; tap it and the app gets paired (if the pairing code has already been used, run `npm run pair` again). The release also includes `SHA256SUMS`, `SHA512SUMS` and the source commit. Check the file first: `sha256sum -c SHA256SUMS`. In-app updates check the SHA-256 too, and cancel the install if it does not match.
+  Works on Huawei and other phones without Google services (the browser's "Install app" option usually isn't available on these phones).
+  Note: pure HarmonyOS (HarmonyOS NEXT / 5.0 and later) can't install APKs directly; install "Zhuoyitong" (卓易通) first.
 
-**第 4 步：开始用**
+**Step 4: Start using it**
 
-- 左上角是当前窗口，点它切换窗口（本地 / SSH / Agents）。
-- 底部输入框发消息；`Agent ▾` / `Auto ▾` 切模式和模型；「历史」打开以前的对话，「＋ 新建」开新对话。
-- Agent 等你确认时（运行命令、接受修改），按钮会直接出现在对话里。
-- 点蓝色文件名或带 📄 的卡片预览文件，按返回键关闭。
-- 右上角「画面」切到实时画面，可以直接点 Cursor 界面上的任何东西。
-- 右上角「⋯ → 开启通知」，Agent 跑完或等你确认时手机会提醒（见下文「通知」）。
+- The top-left shows the current window; tap it to switch windows (local / SSH / Agents).
+- Send messages from the input box at the bottom; use `Agent ▾` / `Auto ▾` to switch mode and model; "History" opens earlier conversations and "＋ New" starts a new one.
+- When the Agent is waiting for your approval (running a command, accepting changes), the buttons show up right in the conversation.
+- Tap a blue file name or a card marked 📄 to preview a file; press Back to close it.
+- "Screen" in the top-right switches to the live view, where you can tap anything in the Cursor UI.
+- "⋯ → Enable notifications" in the top-right makes your phone alert you when the Agent finishes or needs approval (see "Notifications" below).
 
-以后每次 Cursor 重启都要带调试端口，用 `./start-cursor.sh` 启动即可。
+From now on, Cursor must always be started with the debugging port; just launch it with `./start-cursor.sh`.
 
-## 通知
+## Notifications
 
-在 App 里点「⋯ → 开启通知」，之后可以点「发一条测试通知」确认能收到。
+In the app, tap "⋯ → Enable notifications", then tap "Send a test notification" to confirm it works.
 
-| 手机 | 怎么收通知 | 需要注意 |
+| Phone | How notifications arrive | Things to note |
 |---|---|---|
-| 安卓 App | App 自己在后台和电脑保持连接，不依赖谷歌服务，华为也能用 | 通知栏会常驻一条「正在等待 Agent 的消息」（安卓系统的要求）。华为 / 小米等请允许后台运行：华为在「设置 → 应用和服务 → 应用启动管理」里把 Cursor Remote 改成手动管理并全部打开 |
-| iPhone | 系统推送（Web Push），App 关掉也能收到 | 必须先「添加到主屏幕」并从桌面图标打开，iOS 16.4 以上 |
-| 电脑 / 安卓浏览器 | 浏览器推送 | 浏览器要允许通知 |
+| Android app | The app keeps its own background connection to your computer, without Google services, so it works on Huawei too | A persistent "Waiting for Agent messages" notification stays in the notification bar (required by Android). On Huawei / Xiaomi etc., allow background activity: on Huawei, go to "Settings → Apps & services → App launch", set Cursor Remote to manage manually and turn everything on |
+| iPhone | System push (Web Push), works even when the app is closed | You must first "Add to Home Screen" and open it from the home screen icon; iOS 16.4 or later |
+| Desktop / Android browser | Browser push | The browser must be allowed to show notifications |
 
-什么时候会提醒：
+When you get alerted:
 
-- **等你确认**：Agent 停在「运行 / 允许 / 接受」按钮上超过约 10 秒（开了自动运行时一闪而过的不算）。
-- **已完成**：Agent 停止运行，通知里带回复的开头。
-- 你正在手机上看的那个窗口不会重复提醒。
+- **Waiting for approval**: the Agent has been stuck on a "Run / Allow / Accept" button for more than about 10 seconds (buttons that flash by briefly with auto-run enabled don't count).
+- **Finished**: the Agent has stopped running; the notification includes the start of its reply.
+- The window you're currently viewing on your phone doesn't trigger duplicate alerts.
 
-通知内容由电脑直接发出：安卓 App 直连你的电脑；iPhone 和浏览器经过苹果 / 谷歌的推送服务器，内容是端到端加密的，推送服务器看不到。
+Notifications are sent directly by your computer: the Android app connects straight to your computer; iPhone and browsers go through Apple's / Google's push servers, but the content is end-to-end encrypted and the push servers can't read it.
 
-## 让电脑一直在线（防睡眠）
+## Keeping your computer online (preventing sleep)
 
-中继跑在你的电脑上，**电脑一睡眠，手机就连不上了**。
+The relay runs on your computer, so **once your computer sleeps, your phone can't connect**.
 
-| | 锁屏 | 屏幕关闭（熄屏） | 睡眠 / 合盖 |
+| | Screen locked | Display off | Sleep / lid closed |
 |---|---|---|---|
-| 手机还能用吗 | ✅ 能 | ✅ 能（屏幕模式改为定时截图，稍卡） | ❌ 不能 |
+| Does the phone still work? | ✅ Yes | ✅ Yes (screen mode falls back to periodic screenshots, a bit choppy) | ❌ No |
 
-所以要做的只有一件事：**允许关屏幕和锁屏，但不让系统睡眠**。
+So there's only one thing to do: **allow the display to turn off and the screen to lock, but don't let the system sleep**.
 
 ### macOS
 
-**笔记本（插着电源时不睡眠）**：系统设置 → 电池 → 选项 → 打开「使用电源适配器且显示器关闭时，防止自动进入睡眠」。
-或者用命令（只影响插电状态，`-c` = charger）：
+**Laptops (no sleep while plugged in)**: System Settings → Battery → Options → turn on "Prevent automatic sleeping on power adapter when the display is off".
+Or use the command line (affects only the plugged-in state; `-c` = charger):
 
 ```bash
-sudo pmset -c sleep 0          # 插电时永不睡眠
-sudo pmset -c displaysleep 10  # 屏幕照常 10 分钟后关闭（省电，不影响使用）
-pmset -g | grep -E " sleep|displaysleep"   # 查看当前设置
+sudo pmset -c sleep 0          # never sleep while plugged in
+sudo pmset -c displaysleep 10  # display still turns off after 10 minutes (saves power, doesn't affect use)
+pmset -g | grep -E " sleep|displaysleep"   # show current settings
 ```
 
-**台式机（Mac mini / iMac / Studio）**：系统设置 → 节能 → 打开「显示器关闭时，防止自动进入睡眠」。
+**Desktops (Mac mini / iMac / Studio)**: System Settings → Energy → turn on "Prevent automatic sleeping when the display is off".
 
-**只想临时不睡**（比如出门前让 Agent 跑个长任务）：
+**Just stay awake temporarily** (e.g. letting the Agent run a long task before you head out):
 
 ```bash
-caffeinate -s    # 插电时阻止睡眠，按 Ctrl+C 恢复
+caffeinate -s    # prevent sleep while plugged in; press Ctrl+C to restore
 ```
 
-**合盖**：MacBook 合盖一定会睡眠（除非外接显示器 + 电源 + 键盘）。要远程用就别合盖，把屏幕亮度调到最低、锁屏即可。
-不建议用 `sudo pmset -a disablesleep 1` 强行禁止合盖睡眠：放进包里会过热。
+**Closing the lid**: a MacBook always sleeps when the lid is closed (unless it has an external display + power + keyboard). If you want to use it remotely, don't close the lid; turn the brightness all the way down and lock the screen instead.
+Forcing it with `sudo pmset -a disablesleep 1` is not recommended: it will overheat if you put it in a bag.
 
 ### Windows
 
-设置 → 系统 → 电源和电池 → 屏幕和睡眠：「接通电源后，使设备进入睡眠状态」选 **从不**；「关闭屏幕」可以保留（比如 10 分钟）。
-或者用管理员 PowerShell：
+Settings → System → Power & battery → Screen and sleep: set "When plugged in, put my device to sleep after" to **Never**; you can keep "Turn off my screen" (e.g. 10 minutes).
+Or use an administrator PowerShell:
 
 ```powershell
-powercfg /change standby-timeout-ac 0     # 插电时永不睡眠
-powercfg /change monitor-timeout-ac 10    # 屏幕 10 分钟后关闭
-powercfg /change hibernate-timeout-ac 0   # 插电时不休眠
-# 笔记本合盖不睡眠（插电时）：
+powercfg /change standby-timeout-ac 0     # never sleep while plugged in
+powercfg /change monitor-timeout-ac 10    # turn off the display after 10 minutes
+powercfg /change hibernate-timeout-ac 0   # never hibernate while plugged in
+# Don't sleep when the laptop lid is closed (while plugged in):
 powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0
 powercfg /setactive SCHEME_CURRENT
 ```
 
-Windows 上的启动方式（都在 PowerShell 里运行，不要用 Cursor 自带的终端，Cursor 重启时它会被一起关掉）：
+How to start on Windows (run these in PowerShell, not Cursor's built-in terminal, which closes when Cursor restarts):
 
-1. 在项目目录运行 `powershell -ExecutionPolicy Bypass -File .\start-cursor.ps1`，Cursor 会退出并带调试端口重新打开（等同于 Mac 上的 `./start-cursor.sh`）。
-2. 再运行 `npm run public`，这个窗口一直开着别关。`npm run pair` 照常使用。
+1. In the project directory, run `powershell -ExecutionPolicy Bypass -File .\start-cursor.ps1`. Cursor quits and reopens with the debugging port (the equivalent of `./start-cursor.sh` on Mac).
+2. Then run `npm run public` and keep that window open. `npm run pair` works as usual.
 
-### 代价
+### Trade-offs
 
-- **耗电**：笔记本熄屏待机约 3–8 W，一天不到 0.2 度电；台式机 30–100 W，一天 1–2 度电。
-- **电池**：笔记本长期插电满电会加速电池老化。macOS 的「优化电池充电」、Windows 厂商的「电池保护 / 充电上限 80%」可以缓解，建议打开。
-- **安全**：电脑一直开着，等于一直可以被已配对的手机控制。请保持锁屏（锁屏不影响使用），不用的设备及时在「⋯ → 已配对设备」里移除。
+- **Power use**: a laptop idling with the display off draws about 3–8 W, under 0.2 kWh per day; a desktop draws 30–100 W, 1–2 kWh per day.
+- **Battery**: keeping a laptop plugged in at full charge for long periods speeds up battery wear. macOS's "Optimized Battery Charging" and Windows vendors' "battery protection / 80% charge limit" help; turning them on is recommended.
+- **Security**: a computer that's always on can always be controlled by paired phones. Keep it locked (locking doesn't affect use), and remove devices you no longer use under "⋯ → Paired devices".
 
-### 不配置会怎样
+### What happens if you don't set this up
 
-- 电脑睡眠后，手机显示「电脑不在线」，什么都做不了；**Agent 正在跑的任务也会暂停**，直到有人唤醒电脑。
-- 唤醒后服务会自动恢复。隧道地址会变，但会自动发布新地址，手机约 1 分钟后自动重连，**不需要重新配对**。
+- After your computer sleeps, the phone shows "Computer offline" and you can't do anything; **any task the Agent is running also pauses** until someone wakes the computer.
+- After waking, the service recovers automatically. The tunnel address changes, but the new address is published automatically and the phone reconnects within about a minute, **no re-pairing needed**.
 
-## 安全说明
+## Security
 
-- **配对**：`npm run pair` 生成的链接包含一个随机密钥和一次性配对码，10 分钟后失效、用过即作废。手机配对后拿到一个设备令牌，电脑上只保存它的哈希。
-- **GitHub 上没有可破解的东西**：Pages 仓库里的 `url.json`（电脑地址）用随机 256 位密钥加密，这个密钥只通过配对链接传给手机，从不上传。没有密码，也就不存在离线暴力破解密码的问题。
-- **二次验证（可选）**：`npm run 2fa` 绑定 Google Authenticator / Microsoft Authenticator / 1Password 等。开启后，配对新设备时必须输入 6 位验证码；还可以设置每 N 天重新验证一次（默认 30 天，填 0 表示只在配对时验证）。即使配对链接泄露，没有你的手机验证码也配不上。
-- **管理设备**：手机上「⋯ → 已配对设备」可以查看和移除，或在电脑上 `npm run devices`。移除后那台设备立即断开。
-- 调试端口 9222 只监听本机；公网模式下中继也只监听 `127.0.0.1`，外部只能通过隧道访问。
-- 手机只会把配对令牌发给 Cloudflare 快速隧道（`*.trycloudflare.com`），或者发给你自己填的局域网地址。GitHub Pages 上的页面不能被当成电脑地址。
-- 通知只发给苹果、谷歌、Mozilla 或微软的推送服务，内容按 Web Push 加密。其他地址一律拒绝，中继不能把内容 POST 到任意第三方。
-- 电脑只把 App 和加密后的地址发布到你在安装时选的那个 **github.com** 仓库，不会发到别的主机。
-- 安卓更新只从本仓库的 GitHub Release（或你自己 Pages 上的同一份文件）下载，安装前用发布页的 SHA-256 核对，不一致就取消。
-- 配对失败多次会临时锁定。
-- 能配对的设备可以完全控制你的 Cursor，等同于能在你电脑上执行命令。**不要把配对链接发到群里或公开的地方。**
+- **Pairing**: the link generated by `npm run pair` contains a random key and a one-time pairing code; it expires after 10 minutes and is invalidated after use. After pairing, the phone receives a device token, and the computer stores only its hash.
+- **Nothing on GitHub to crack**: `url.json` (your computer's address) in the Pages repository is encrypted with a random 256-bit key. That key is passed to the phone only through the pairing link and is never uploaded. There's no password, so there's no offline password brute-forcing either.
+- **Two-factor verification (optional)**: `npm run 2fa` binds Google Authenticator / Microsoft Authenticator / 1Password, etc. Once enabled, pairing a new device requires a 6-digit code; you can also require re-verification every N days (default 30; 0 means only verify at pairing). Even if a pairing link leaks, it can't be used without the code from your phone.
+- **Managing devices**: view and remove devices on your phone under "⋯ → Paired devices", or on your computer with `npm run devices`. A removed device is disconnected immediately.
+- Debugging port 9222 listens only on localhost; in public mode the relay also listens only on `127.0.0.1`, so it can only be reached from outside through the tunnel.
+- The phone sends the pairing token only to a Cloudflare quick tunnel (`*.trycloudflare.com`), or to a LAN address you typed yourself. A page on GitHub Pages is never treated as the computer.
+- Notifications go only to Apple, Google, Mozilla or Microsoft push services, and the payload is encrypted as Web Push. Any other address is refused, so the relay cannot POST the content to an arbitrary third party.
+- The computer publishes the app and the encrypted address only to the **github.com** repository you chose during setup, not to any other host.
+- Android updates download only from this repository's GitHub Release (or the same file on your own Pages site). The install is cancelled unless the bytes match the SHA-256 on the release.
+- Repeated failed pairing attempts trigger a temporary lockout.
+- A paired device has full control over your Cursor, which is equivalent to being able to run commands on your computer. **Don't post pairing links in group chats or anywhere public.**
 
-## 常用命令
+## Common commands
 
-| 命令 | 作用 |
+| Command | What it does |
 |---|---|
-| `npm run setup` | 安装向导（可重复运行） |
-| `npm run pair` | 配对一台新设备（显示二维码） |
-| `npm run devices` | 查看已配对设备；`npm run devices remove <id>` 移除 |
-| `npm run 2fa` | 开启 / 重新绑定 Authenticator 二次验证；`npm run 2fa off` 关闭；`npm run 2fa status` 查看 |
-| `npm run public` | 前台运行（外网 + 固定地址） |
-| `npm start` | 前台运行（只在局域网） |
-| `./service.sh status / logs / uninstall` | 后台服务状态 / 日志 / 卸载 |
-| `npm run reset` | 清除所有配对、二次验证和配置（之后要重新配对） |
+| `npm run setup` | Setup wizard (can be re-run) |
+| `npm run pair` | Pair a new device (shows a QR code) |
+| `npm run devices` | List paired devices; `npm run devices remove <id>` removes one |
+| `npm run 2fa` | Enable / re-bind Authenticator 2FA; `npm run 2fa off` disables it; `npm run 2fa status` shows status |
+| `npm run public` | Run in the foreground (public access + fixed address) |
+| `npm start` | Run in the foreground (LAN only) |
+| `./service.sh status / logs / uninstall` | Background service status / logs / uninstall |
+| `npm run reset` | Clear all pairings, 2FA and configuration (you'll need to pair again afterwards) |
 
-## 常见问题
+## FAQ
 
-**手机上显示「未连接到 Cursor」**：Cursor 没带调试端口启动，运行 `./start-cursor.sh`（Windows 用 `start-cursor.ps1`）。
+**The phone shows "Not connected to Cursor"**: Cursor wasn't started with the debugging port; run `./start-cursor.sh` (on Windows, `start-cursor.ps1`).
 
-**手机上显示「电脑不在线」**：电脑睡眠 / 关机，或服务刚重启（新地址约 1 分钟后生效，会自动重试）。见上文「防睡眠」。
+**The phone shows "Computer offline"**: the computer is asleep / shut down, or the service just restarted (the new address takes effect in about a minute, and the app retries automatically). See "Preventing sleep" above.
 
-**换了手机 / 清了浏览器数据**：在电脑上 `npm run pair` 重新配对，旧设备在「已配对设备」里删掉。
+**Got a new phone / cleared browser data**: run `npm run pair` on your computer to pair again, and delete the old device under "Paired devices".
 
-**要花钱吗？会用掉什么免费额度吗？** 不会。运行时只用到三样东西：
-- Cloudflare 快速隧道：免费，不用注册。
-- GitHub Pages：公开仓库免费。电脑每次重启发布一次地址（一次提交）；Pages 建议每小时不超过 10 次构建，超过也只是稍晚生效。
-- GitHub API：每小时 5000 次额度，实际只用几次。
+**Does it cost anything? Does it use up any free quotas?** No. At runtime it uses only three things:
+- Cloudflare quick tunnels: free, no sign-up required.
+- GitHub Pages: free for public repositories. Your computer publishes its address once per restart (one commit); Pages recommends no more than 10 builds per hour, and going over just means changes take effect a bit later.
+- GitHub API: 5,000 requests per hour; only a handful are actually used.
 
-GitHub Actions 只在作者发布新版 APK 时用到，用户这边不会运行。
+GitHub Actions is only used when the author publishes a new APK release; nothing runs on the user's side.
 
-**收不到通知**：先在菜单里「发一条测试通知」。测试通知收不到：安卓检查系统通知权限和后台运行权限；iPhone 确认是从桌面图标打开的。测试通知能收到、但 Agent 的提醒没来：电脑可能睡眠了，或者 Cursor 不是用 `./start-cursor.sh` 启动的。
+**Not receiving notifications**: first use "Send a test notification" from the menu. If the test notification doesn't arrive: on Android, check the system notification permission and background activity permission; on iPhone, make sure you opened the app from the home screen icon. If the test notification arrives but Agent alerts don't: your computer may be asleep, or Cursor wasn't started with `./start-cursor.sh`.
 
-**公司网络打不开**：Cloudflare 隧道走 443 端口，一般都能用；如果连 `trycloudflare.com` 都被拦，就只能在同一局域网下用 `npm start`。
+**Doesn't work on a company network**: Cloudflare tunnels use port 443, which usually works; if even `trycloudflare.com` is blocked, you can only use `npm start` on the same LAN.
 
-**SSH 远程窗口看不到**：点左上角窗口名打开窗口列表，列表每次打开都会刷新。
+**SSH remote window doesn't show up**: tap the window name in the top-left to open the window list; the list refreshes every time you open it.
 
-**点文件提示找不到**：文件可能已被删除或移动；SSH 窗口的文件需要电脑能免密 `ssh` 到那台机器。
+**Tapping a file says it can't be found**: the file may have been deleted or moved; for files in SSH windows, your computer needs passwordless `ssh` to that machine.
 
-## 赞赏
+## Support the project
 
-觉得好用的话，可以请作者喝杯咖啡 ☕（完全自愿）
+If you find it useful, you can buy the author a coffee ☕ (entirely optional).
 
-| 微信 | 支付宝 |
+| WeChat Pay | Alipay |
 |---|---|
-| <img src="app/donate-wechat.jpg" width="220" alt="微信收款码"> | <img src="app/donate-alipay.jpg" width="220" alt="支付宝收款码"> |
+| <img src="app/donate-wechat.jpg" width="220" alt="WeChat Pay QR code"> | <img src="app/donate-alipay.jpg" width="220" alt="Alipay QR code"> |
 
-App 里「⋯ → 赞赏作者」显示的内容由 `app/donate.json` 控制，可以在 `links` 里加海外付款链接，例如：
+What the app shows under "⋯ → Support the author" is controlled by `app/donate.json`. You can add international payment links in `links`, for example:
 
 ```json
-"links": [{ "label": "PayPal", "url": "https://paypal.me/你的用户名" }]
+"links": [{ "label": "PayPal", "url": "https://paypal.me/your-username" }]
 ```
 
 ## License

@@ -3,7 +3,17 @@
 # Usage: ./service.sh install | uninstall | status | logs
 set -euo pipefail
 
-say() { if [[ "${LC_ALL:-${LANG:-}}" == zh* ]]; then printf '%s\n' "$1"; else printf '%s\n' "$2"; fi; }
+# OS UI language. LC_ALL overrides it. launchd often has no LANG, so on macOS read AppleLanguages.
+ui_lang() {
+  local loc="${LC_ALL:-}"
+  if [[ -n "$loc" && "$loc" != C && "$loc" != POSIX && "$loc" != C.* ]]; then printf '%s' "$loc"; return; fi
+  if [[ "$(uname -s)" == Darwin ]]; then
+    loc="$(defaults read -g AppleLanguages 2>/dev/null | sed -n 's/.*"\([^"]*\)".*/\1/p' | head -1 || true)"
+    if [[ -n "$loc" ]]; then printf '%s' "$loc"; return; fi
+  fi
+  printf '%s' "${LANG:-}"
+}
+say() { if [[ "$(ui_lang)" == zh* ]]; then printf '%s\n' "$1"; else printf '%s\n' "$2"; fi; }
 
 LABEL="com.cursor-remote-lite.relay"
 OLD_LABELS=("com.suchenl.cursor-remote-lite")

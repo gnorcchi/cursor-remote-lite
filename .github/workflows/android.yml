@@ -113,9 +113,5 @@ jobs:
           - SHA-256: ${SHA256}
           - SHA-512: ${SHA512}
           - Source commit: ${GITHUB_SHA}
-
-          安卓 App：下载 CursorRemote.apk 安装，首次打开填入你的手机 App 地址。安装前用上面的 SHA-256 / SHA-512 核对文件。
-
-          - 源码提交：${GITHUB_SHA}
           EOF
           )"

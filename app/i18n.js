@@ -1,8 +1,10 @@
-// UI language. The app is written in Chinese; in English mode visible UI text is swapped through this table.
-// Chat content, file previews and window/model names are left alone (see SKIP).
+// UI language. The page is authored in Chinese; English mode swaps visible UI text through this table.
+// With no saved choice, this follows the phone's system language. Chat content, file previews and
+// window/model names are left alone (see SKIP).
 const I18N = (() => {
   const saved = localStorage.getItem('cr-lang');
-  const lang = saved === 'zh' || saved === 'en' ? saved : /^zh\b/i.test(navigator.language || '') ? 'zh' : 'en';
+  const sys = (navigator.languages && navigator.languages[0]) || navigator.language || '';
+  const lang = saved === 'zh' || saved === 'en' ? saved : /^zh\b/i.test(sys) ? 'zh' : 'en';
 
   const EN = {
     '连接中…': 'Connecting…', '对话': 'Chat', '画面': 'Screen', '↑ 加载更早的消息': '↑ Load earlier messages',
