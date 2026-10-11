@@ -1,14 +1,14 @@
 {
   "name": "Cursor Remote",
   "short_name": "Cursor Remote",
-  "description": "在手机上查看和操作电脑上的 Cursor",
+  "description": "Control the Cursor on your computer from your phone. 在手机上查看和操作电脑上的 Cursor",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#1e1e1e",
   "theme_color": "#1e1e1e",
-  "lang": "zh-CN",
+  "lang": "en",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },

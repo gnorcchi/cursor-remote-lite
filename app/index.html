@@ -1,6 +1,15 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
+<script>
+// Match the document language to the phone before the rest of the page runs.
+(function () {
+  var saved = localStorage.getItem('cr-lang');
+  var sys = (navigator.languages && navigator.languages[0]) || navigator.language || '';
+  var lang = saved === 'zh' || saved === 'en' ? saved : /^zh\b/i.test(sys) ? 'zh' : 'en';
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+})();
+</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -355,12 +364,49 @@ async function decryptUrl(keyText) {
 }
 
 const offline = msg => Object.assign(new Error(msg), { offline: true });
+// The phone sends the device token only to the relay: a Cloudflare quick tunnel, or a LAN
+// address the user typed. A github.io page must not be treated as the relay.
+function privateHost(host) {
+  const m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(host);
+  if (!m) return host === 'localhost' || host.endsWith('.local');
+  const a = +m[1], b = +m[2];
+  return a === 10 || a === 127 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 169 && b === 254);
+}
+function publicRelayOk(url) {
+  try {
+    const u = new URL(url);
+    if (u.username || u.password || u.search || u.hash) return false;
+    if (u.protocol !== 'https:' || (u.port && u.port !== '443')) return false;
+    if (u.pathname !== '/' && u.pathname !== '') return false;
+    return /^[a-z0-9-]+\.trycloudflare\.com$/.test(u.hostname);
+  } catch { return false; }
+}
+function pageIsRelay() {
+  try {
+    const u = new URL(location.href);
+    if (u.username || u.password) return false;
+    if (publicRelayOk(u.origin)) return true;
+    const host = u.hostname.toLowerCase();
+    if (host === 'github.io' || host.endsWith('.github.io') || host.endsWith('.githubusercontent.com')) return false;
+    return (u.protocol === 'http:' || u.protocol === 'https:') && privateHost(host);
+  } catch { return false; }
+}
 async function resolveBase() {
-  if (info.self) return location.origin;
+  if (info.self) {
+    if (!pageIsRelay()) throw offline('电脑地址不受信任，已拒绝连接');
+    return location.origin;
+  }
   if (info.v !== 2 || !info.data) throw offline('电脑端还没有发布地址（或还在用旧版本），请在电脑上重启服务');
   const key = store.get('key');
   if (!key) throw Object.assign(new Error(''), { unpaired: true });
-  try { return await decryptUrl(key); } catch { throw Object.assign(new Error('配对信息已失效（电脑端重置过），请重新配对'), { unpaired: true, stale: true }); }
+  try {
+    const url = (await decryptUrl(key)).replace(/\/$/, '');
+    if (!publicRelayOk(url)) throw offline('电脑地址不受信任，已拒绝连接');
+    return url;
+  } catch (e) {
+    if (e.offline) throw e;
+    throw Object.assign(new Error('配对信息已失效（电脑端重置过），请重新配对'), { unpaired: true, stale: true });
+  }
 }
 
 async function api(path, opts = {}) {
@@ -368,7 +414,7 @@ async function api(path, opts = {}) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 10000);
   try {
-    return await fetch(base + path, { ...opts, headers, signal: ctl.signal, cache: 'no-store' });
+    return await fetch(base + path, { ...opts, headers, signal: ctl.signal, cache: 'no-store', redirect: 'error', credentials: 'omit' });
   } finally {
     clearTimeout(timer);
   }
@@ -705,11 +751,31 @@ function showMainMenu() {
 $('menuBtn').onclick = showMainMenu;
 
 const inApp = /CursorRemoteApp/.test(navigator.userAgent);
-const APK_RELEASE = 'https://github.com/Suchenl/cursor-remote-lite/releases/latest/download/CursorRemote.apk';
-// A copy on the user's own GitHub Pages downloads more reliably in mainland China than GitHub Releases.
-let apkUrl = APK_RELEASE;
-fetch('CursorRemote.apk', { method: 'HEAD' }).then(r => { if (r.ok) apkUrl = new URL('CursorRemote.apk', location.href).href; }).catch(() => {});
+// Official releases only. The request is a GET with no token and no chat data.
+const RELEASE_REPO = 'gnorcchi/cursor-remote-lite';
+let mirrorApk = false;
+let releaseApkUrl = '';
+fetch('CursorRemote.apk', { method: 'HEAD', cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' })
+  .then(r => { if (r.ok) mirrorApk = true; }).catch(() => {});
 const appAddress = () => location.origin + location.pathname.replace(/index\.html$/, '');
+
+function githubAssetUrl(url, name) {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'https:' || u.username || u.password || u.host !== 'github.com') return '';
+    if (u.search || u.hash) return '';
+    const prefix = `/${RELEASE_REPO}/releases/`;
+    if (!u.pathname.startsWith(prefix) || !u.pathname.endsWith('/' + name) || u.pathname.includes('..')) return '';
+    return u.href;
+  } catch { return ''; }
+}
+function apkDownloadUrl() {
+  if (mirrorApk) {
+    const u = new URL('CursorRemote.apk', location.href);
+    if (u.protocol === 'https:' && u.host === location.host && !u.pathname.includes('..')) return u.href;
+  }
+  return releaseApkUrl;
+}
 
 // The page itself updates with GitHub Pages; only the Android shell needs a new APK now and then.
 const appVersion = /CursorRemoteApp\/v?([\d.]+)/.exec(navigator.userAgent)?.[1];
@@ -722,28 +788,56 @@ const apkUpdate = () => {
   const latest = store.get('apkLatest');
   return appVersion && latest && newerThan(latest, appVersion) ? latest : null;
 };
+async function loadRelease() {
+  const r = await fetch(`https://api.github.com/repos/${RELEASE_REPO}/releases/latest`, {
+    cache: 'no-store',
+    credentials: 'omit',
+    referrerPolicy: 'no-referrer',
+    headers: { accept: 'application/vnd.github+json' },
+  });
+  if (!r.ok) throw new Error('release');
+  const j = await r.json();
+  const assets = Array.isArray(j.assets) ? j.assets : [];
+  const apk = assets.find(a => a && a.name === 'CursorRemote.apk');
+  const sums = assets.find(a => a && a.name === 'SHA256SUMS');
+  releaseApkUrl = githubAssetUrl(apk?.browser_download_url || '', 'CursorRemote.apk');
+  const sumsUrl = githubAssetUrl(sums?.browser_download_url || '', 'SHA256SUMS');
+  let sha = '';
+  if (sumsUrl) {
+    const text = await fetch(sumsUrl, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' }).then(x => x.ok ? x.text() : '');
+    const line = text.split(/\r?\n/).map(s => s.trim()).find(s => s.endsWith('CursorRemote.apk'));
+    const hex = (line || '').split(/\s+/)[0] || '';
+    if (/^[a-f0-9]{64}$/i.test(hex)) sha = hex.toLowerCase();
+  }
+  store.set('apkLatest', String(j.tag_name || '').replace(/^v/, ''));
+  store.set('apkSha', sha);
+  store.set('apkChecked', Date.now());
+}
 async function checkAppUpdate(manual = false) {
   if (!inApp || !appVersion) return;
-  if (!manual && Date.now() - (store.get('apkChecked') || 0) < 6 * 3600e3) return;
-  try {
-    const r = await fetch('https://api.github.com/repos/Suchenl/cursor-remote-lite/releases/latest', { cache: 'no-store' });
-    if (!r.ok) throw new Error();
-    store.set('apkLatest', String((await r.json()).tag_name || '').replace(/^v/, ''));
-    store.set('apkChecked', Date.now());
-  } catch {
+  if (!manual && store.get('apkSha') && Date.now() - (store.get('apkChecked') || 0) < 6 * 3600e3) return;
+  try { await loadRelease(); } catch {
     if (manual) status('检查更新失败，请稍后再试', false);
     return;
   }
   if (apkUpdate()) status(`安卓 App 有新版本 v${apkUpdate()}，点右上角「⋯」更新`);
   else if (manual) status('已经是最新版本');
 }
-function installAppUpdate() {
-  if (window.CursorRemoteApp?.update) {
-    window.CursorRemoteApp.update(apkUrl);
-    status('正在下载新版本，下载完会弹出安装界面');
+async function installAppUpdate() {
+  if (!/^[a-f0-9]{64}$/.test(String(store.get('apkSha') || ''))) {
+    try { await loadRelease(); } catch {}
   }
-  // Older shells can't download: an off-site link opens in the system browser instead.
-  else location.href = APK_RELEASE;
+  const sha = String(store.get('apkSha') || '');
+  const url = apkDownloadUrl();
+  if (!/^[a-f0-9]{64}$/.test(sha) || !url) return status('找不到官方校验值，已取消更新', false);
+  // The installed app checks the bytes against this SHA-256 before it opens the installer.
+  if (window.CursorRemoteApp?.update) {
+    try {
+      window.CursorRemoteApp.update(url, sha);
+      return status('正在下载新版本，下载完会弹出安装界面');
+    } catch { /* an older shell has no checksum argument; fall through to the browser */ }
+  }
+  if (releaseApkUrl) location.href = releaseApkUrl;
 }
 
 /* ---------- notifications ---------- */
@@ -818,14 +912,18 @@ document.addEventListener('visibilitychange', () => {
   if (authed) send({ t: 'visible', v: document.visibilityState === 'visible' });
 });
 
-function showInstallHelp() {
+async function showInstallHelp() {
   const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
   if (ios) {
     return openSheet('install', `<h3>安装到桌面</h3><div class="hint">用 Safari 打开本页 → 点底部「分享」按钮 → 选「添加到主屏幕」。<br>安装后从桌面图标打开，就是全屏 App。</div>`);
   }
+  if (!releaseApkUrl) { try { await loadRelease(); } catch {} }
+  const sha = store.get('apkSha');
+  const apkHref = sha ? (releaseApkUrl || apkDownloadUrl()) : '';
   openSheet('install', `<h3>安装安卓 App</h3>
-    <a class="opt" href="${esc(apkUrl)}"><span class="lbl">下载安卓 App（推荐）</span><span class="tag">APK</span></a>
+    ${apkHref ? `<a class="opt" href="${esc(apkHref)}"><span class="lbl">下载安卓 App（推荐）</span><span class="tag">APK</span></a>` : ''}
     <div class="hint">华为等没有谷歌服务的手机、任何浏览器都能装。下载后点开安装（如提示「未知来源」，允许即可）。<br>
+      核对发布页上的 SHA-256 后再安装。${sha ? '<br>SHA-256: ' + esc(sha) : ''}<br>
       首次打开填入这个地址：</div>
     <button class="opt" data-act="copyAddress"><span class="lbl">${esc(appAddress())}</span><span class="tag">复制</span></button>
     ${installEvent ? '<button class="opt" data-act="browserInstall"><span class="lbl">或者：用浏览器安装（需要谷歌服务）</span></button>' : ''}`);
@@ -866,7 +964,7 @@ $('sheet').addEventListener('click', async e => {
     status(r?.ok ? '已发送测试通知，几秒内应该收到' : '发送失败', Boolean(r?.ok));
   }
   else if (act === 'appUpdate') {
-    if (apkUpdate()) { closeSheet(); installAppUpdate(); }
+    if (apkUpdate()) { closeSheet(); await installAppUpdate(); }
     else { await checkAppUpdate(true); if (apkUpdate()) showMainMenu(); }
   }
   else if (act === 'reconnect') { closeSheet(); ws?.close(); }

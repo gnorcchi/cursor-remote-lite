@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import webpush from 'web-push';
 import { DATA_DIR, listDevices, updateDevice } from './auth.mjs';
+import { t } from './locale.mjs';
 
 const POLL_MS = 3000;
 // Agent stop button flickers between steps; require it gone for this many polls before calling the run finished.
@@ -23,8 +24,24 @@ function vapid() {
 }
 const keys = vapid();
 // Apple's push service rejects VAPID tokens without a mailto: or https: subject.
-webpush.setVapidDetails('https://github.com/Suchenl/cursor-remote-lite', keys.publicKey, keys.privateKey);
+// The subject is an identifier inside the request, not a place this process uploads data.
+webpush.setVapidDetails('https://github.com/gnorcchi/cursor-remote-lite', keys.publicKey, keys.privateKey);
 export const pushPublicKey = () => keys.publicKey;
+
+// The relay only talks to the push services browsers actually use. Anything else is refused,
+// so a paired device cannot point notifications at an arbitrary server.
+const PUSH_HOST = /^(?:fcm\.googleapis\.com|android\.googleapis\.com|updates\.push\.services\.mozilla\.com|push\.services\.mozilla\.com|web\.push\.apple\.com)$/;
+const PUSH_HOST_WILD = /^(?:[a-z0-9-]+\.push\.apple\.com|[a-z0-9.-]+\.notify\.windows\.com)$/;
+
+export function pushEndpointAllowed(endpoint) {
+  let u;
+  try { u = new URL(String(endpoint || '')); } catch { return false; }
+  if (u.protocol !== 'https:' || u.username || u.password) return false;
+  if (u.port && u.port !== '443') return false;
+  if (u.hash) return false;
+  const host = u.hostname.toLowerCase();
+  return PUSH_HOST.test(host) || PUSH_HOST_WILD.test(host);
+}
 
 /* ---------- who is listening / looking ---------- */
 
@@ -65,12 +82,19 @@ export async function deliver(event, onlyDevice = null) {
     const payload = JSON.stringify(d.lang === 'en' && en ? { ...zh, ...en } : zh);
     for (const s of streams) if (s.deviceId === d.id) s.res.write(`data: ${payload}\n\n`);
     if (!d.push) continue;
+    if (!pushEndpointAllowed(d.push.endpoint)) {
+      updateDevice(d.id, { push: null });
+      continue;
+    }
     try {
       await webpush.sendNotification(d.push, payload, { TTL: 3600, urgency: 'high' });
     } catch (e) {
       // 404/410: the browser dropped the subscription (app removed, permission revoked).
       if (e.statusCode === 404 || e.statusCode === 410) updateDevice(d.id, { push: null });
-      else console.log(`!! 推送到「${d.name}」失败：${e.statusCode || ''} ${e.body || e.message}`);
+      else console.log(t(
+        `!! 推送到「${d.name}」失败：${e.statusCode || ''} ${e.body || e.message}`,
+        `!! push to "${d.name}" failed: ${e.statusCode || ''} ${e.body || e.message}`,
+      ));
     }
   }
 }

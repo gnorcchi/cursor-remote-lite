@@ -122,6 +122,7 @@ public class NotifyService extends Service {
     private String resolveRelay(String app, String key) throws Exception {
         JSONObject info = new JSONObject(get(app + (app.endsWith("/") ? "" : "/") + "url.json?t=" + System.currentTimeMillis()));
         if (info.optBoolean("self")) {
+            if (!savedAppIsRelay(app)) throw new Exception("relay");
             Uri u = Uri.parse(app);
             return u.getScheme() + "://" + u.getAuthority();
         }
@@ -129,7 +130,44 @@ public class NotifyService extends Service {
         byte[] k = Base64.decode(key, Base64.URL_SAFE | Base64.NO_PADDING | Base64.NO_WRAP);
         c.init(Cipher.DECRYPT_MODE, new SecretKeySpec(k, "AES"), new GCMParameterSpec(128, Base64.decode(info.getString("iv"), Base64.DEFAULT)));
         byte[] plain = c.doFinal(Base64.decode(info.getString("data"), Base64.DEFAULT));
-        return new JSONObject(new String(plain, StandardCharsets.UTF_8)).getString("url");
+        String url = new JSONObject(new String(plain, StandardCharsets.UTF_8)).getString("url");
+        if (url.endsWith("/")) url = url.substring(0, url.length() - 1);
+        if (!tunnelOk(url)) throw new Exception("relay");
+        return url;
+    }
+
+    // Notifications connect only to the quick tunnel, or to a LAN address the user typed.
+    // A public page that says "self" must not receive the device token.
+    private static boolean tunnelOk(String url) {
+        Uri u = Uri.parse(url);
+        if (!"https".equalsIgnoreCase(u.getScheme()) || u.getUserInfo() != null) return false;
+        if (u.getQuery() != null || u.getFragment() != null) return false;
+        String host = u.getHost() == null ? "" : u.getHost().toLowerCase(Locale.ROOT);
+        if (!host.matches("[a-z0-9-]+\\.trycloudflare\\.com")) return false;
+        String path = u.getPath();
+        return path == null || path.isEmpty() || "/".equals(path);
+    }
+
+    private static boolean savedAppIsRelay(String app) {
+        Uri u = Uri.parse(app);
+        if (u.getUserInfo() != null) return false;
+        String scheme = u.getScheme() == null ? "" : u.getScheme().toLowerCase(Locale.ROOT);
+        String host = u.getHost() == null ? "" : u.getHost().toLowerCase(Locale.ROOT);
+        if ("https".equals(scheme) && host.matches("[a-z0-9-]+\\.trycloudflare\\.com")) return true;
+        if (!"http".equals(scheme) && !"https".equals(scheme)) return false;
+        if (host.endsWith(".github.io") || host.endsWith(".githubusercontent.com") || "github.io".equals(host)) return false;
+        return "localhost".equals(host) || host.endsWith(".local") || privateIp(host);
+    }
+
+    private static boolean privateIp(String host) {
+        String[] p = host.split("\\.");
+        if (p.length != 4) return false;
+        try {
+            int a = Integer.parseInt(p[0]), b = Integer.parseInt(p[1]);
+            return a == 10 || a == 127 || (a == 192 && b == 168) || (a == 172 && b >= 16 && b <= 31) || (a == 169 && b == 254);
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     private static String get(String url) throws Exception {
@@ -155,6 +193,8 @@ public class NotifyService extends Service {
         HttpURLConnection c = (HttpURLConnection) new URL(relay + "/api/events").openConnection();
         conn = c;
         c.setConnectTimeout(15000);
+        // Don't follow a redirect: that would send the device token to some other host.
+        c.setInstanceFollowRedirects(false);
         // The relay pings every 25 s; silence longer than this means the connection is dead.
         c.setReadTimeout(70000);
         c.setRequestProperty("Authorization", "Bearer " + token);

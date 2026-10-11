@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
@@ -33,7 +33,9 @@
 </div>
 <script>
 const $ = id => document.getElementById(id);
-const zh = /^zh\b/i.test(navigator.language || '');
+const sys = (navigator.languages && navigator.languages[0]) || navigator.language || '';
+const zh = /^zh\b/i.test(sys);
+document.documentElement.lang = zh ? 'zh-CN' : 'en';
 const T = zh ? s => s : s => ({
   '地址必须是 https': 'The address must use https', '请填写地址': 'Enter an address', '地址格式不对': 'That address is not valid',
 }[s] || s);

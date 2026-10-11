@@ -41,4 +41,15 @@ nohup bash -c "
 " >"$LOG" 2>&1 &
 disown
 
-echo "Cursor 将退出并带调试端口重新打开（结果见 $LOG）"
+loc="${LC_ALL:-}"
+if [[ -z "$loc" || "$loc" == C || "$loc" == POSIX || "$loc" == C.* ]]; then
+  if [[ "$(uname -s)" == Darwin ]]; then
+    loc="$(defaults read -g AppleLanguages 2>/dev/null | sed -n 's/.*"\([^"]*\)".*/\1/p' | head -1 || true)"
+  fi
+  loc="${loc:-${LANG:-}}"
+fi
+if [[ "$loc" == zh* ]]; then
+  echo "Cursor 将退出并带调试端口重新打开（结果见 $LOG）"
+else
+  echo "Cursor will quit and reopen with the debugging port (see $LOG)"
+fi
